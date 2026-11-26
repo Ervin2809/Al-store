@@ -86,6 +86,10 @@ a{color:inherit;text-decoration:none}
   mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);
   animation:bannerSpin 4s linear infinite;filter:drop-shadow(0 0 6px var(--g2))}
 .top .wrap{padding:0 20px}
+/* header home: polos selama banner masih terlihat, glow baru muncul setelah banner lewat */
+.top.calm{animation:none;box-shadow:none;border-color:var(--line)}
+.top.calm::before{display:none}
+.top{transition:border-color .3s ease}
 @media (prefers-reduced-motion:reduce){.top,.top::before{animation:none}}
 .slides{display:flex;transition:transform .5s ease}
 .slide{min-width:100%;padding:28px 22px 44px;min-height:170px;display:flex;flex-direction:column;justify-content:center;gap:8px}
@@ -531,7 +535,7 @@ html[data-theme="light"] .kbox code{color:#15803d}
 
 <!-- HOME -->
 <div id="homeView">
-  <header class="top">
+  <header class="top calm" id="homeTop">
     <div class="wrap">
       <div class="logo" id="logo">A</div>
       <div class="brand" id="brand"></div>
@@ -1208,8 +1212,16 @@ document.addEventListener("click", async e => {
 });
 
 
+/* ---------- posisi scroll per halaman (biar kembali tetap di tempat semula) ---------- */
+try{ if("scrollRestoration" in history) history.scrollRestoration = "manual"; }catch(_){}
+const SCR = {};
+const scrKey = () => location.pathname + location.search;
+window.addEventListener("scroll", () => { SCR[scrKey()] = window.scrollY; }, {passive:true});
+/* ROUTING = navigasi back/forward -> kembalikan posisi lama; klik baru -> mulai dari atas */
+function restoreScroll(){ window.scrollTo(0, ROUTING ? (SCR[scrKey()] || 0) : 0); }
+
 /* ---------- views ---------- */
-function showHome(){ { const lk = guestLock(); if(lk){ showPage("order", "a", lk); return; } } clearInterval(cdTimer); $("pageView").hidden = true; pushUrl(null); document.title = brandName() + " — Digital Store Otomatis 24 Jam"; $("homeView").hidden = false; $("productView").hidden = true; window.scrollTo(0,0); }
+function showHome(){ { const lk = guestLock(); if(lk){ showPage("order", "a", lk); return; } } clearInterval(cdTimer); $("pageView").hidden = true; pushUrl(null); document.title = brandName() + " — Digital Store Otomatis 24 Jam"; $("homeView").hidden = false; $("productView").hidden = true; restoreScroll(); }
 function fillBuyer(){ $("who").textContent = S.guest ? "@" + S.guest : ""; }
 function openProduct(id){
   { const lk = guestLock(); if(lk){ showPage("order", "a", lk); flash("Selesaikan pesananmu dulu. Tekan Kembali ke Beranda kalau sudah selesai."); return; } }
@@ -1217,8 +1229,8 @@ function openProduct(id){
   const p = prod();
   $("pcard").innerHTML = `${tile(p)}<div><h2>${esc(p.name)}</h2><span class="badge">${esc(p.platform)}</span></div>`;
   clearInterval(cdTimer); $("pageView").hidden = true;
-  $("homeView").hidden = true; $("productView").hidden = false; window.scrollTo(0,0);
-  fillBuyer(); renderPkgs(); setTab("buy"); updTotal();
+  $("homeView").hidden = true; $("productView").hidden = false;
+  fillBuyer(); renderPkgs(); setTab("buy"); updTotal(); restoreScroll();
   pushUrl(p); document.title = p.name + " — " + brandName();
 }
 function renderPkgs(){
@@ -1392,7 +1404,7 @@ function showPage(name, tab, extra){
   closeAll(); clearInterval(cdTimer); PG.proc = null; if(name === "adminguide") GA = null; if(name === "adminmarkup") MK = null; if(name === "adminbanner") BN = null; if(name === "adminlb") LBE = null; if(name === "adminticker") TKE = null; if(name === "adminplat") PLE = null;
   PG = {name, tab: tab || "a", filter:"all", dep: PG.dep || 0, oid: extra || ""};
   $("homeView").hidden = true; $("productView").hidden = true; $("pageView").hidden = false;
-  renderPage(); window.scrollTo(0,0); pushUrl(null, slugOfPage(name, PG.tab), pgExtra());
+  renderPage(); restoreScroll(); pushUrl(null, slugOfPage(name, PG.tab), pgExtra());
 }
 function leavePage(){ clearInterval(cdTimer); showHome(); }
 function seg(a, b){ return `<div class="seg2" role="group"><button type="button" data-act="tab" data-t="a" aria-pressed="${PG.tab==="a"}">${a}</button><button type="button" data-act="tab" data-t="b" aria-pressed="${PG.tab==="b"}">${b}</button></div>`; }
@@ -2068,6 +2080,26 @@ LOAD_ON = true;
 { let last = 0; const warn = () => { const n = Date.now(); if(n - last < 15000) return; last = n; try{ flash("Ada kendala di halaman. Muat ulang jika ada yang tidak berfungsi."); }catch(_){} };
   window.addEventListener("error", e => { if(e && e.error) warn(); });
   window.addEventListener("unhandledrejection", () => warn()); }
+</script>
+<script>
+(function(){
+  var top=document.getElementById("homeTop"), ban=document.querySelector(".banner"), home=document.getElementById("homeView");
+  if(!top||!ban||!home) return;
+  function upd(){
+    if(home.hidden) return;
+    var r=ban.getBoundingClientRect(), h=top.getBoundingClientRect();
+    top.classList.toggle("calm", r.bottom > h.bottom);
+  }
+  function later(){ upd(); requestAnimationFrame(upd); setTimeout(upd,120); }
+  window.addEventListener("scroll",upd,{passive:true});
+  window.addEventListener("resize",upd);
+  window.addEventListener("load",upd);
+  window.addEventListener("pageshow",later);
+  window.addEventListener("popstate",later);
+  /* saat kembali ke home (homeView tampil lagi), hitung ulang */
+  new MutationObserver(later).observe(home,{attributes:true,attributeFilter:["hidden"]});
+  upd();
+})();
 </script>
 </body>
 </html>
