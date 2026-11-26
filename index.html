@@ -1246,11 +1246,12 @@ document.addEventListener("click", async e => {
 
 /* ---------- posisi scroll per halaman (biar kembali tetap di tempat semula) ---------- */
 try{ if("scrollRestoration" in history) history.scrollRestoration = "manual"; }catch(_){}
-const SCR = {};
+const SCR = (() => { try{ return JSON.parse(sessionStorage.getItem("alstore_scr")) || {}; }catch(_){ return {}; } })();
 const scrKey = () => location.pathname + location.search;
-window.addEventListener("scroll", () => { SCR[scrKey()] = window.scrollY; }, {passive:true});
+window.addEventListener("scroll", () => { if(typeof pgLoading !== "undefined" && pgLoading) return; SCR[scrKey()] = window.scrollY; try{ sessionStorage.setItem("alstore_scr", JSON.stringify(SCR)); }catch(_){} }, {passive:true});   /* jangan simpan posisi saat transisi loading (URL sudah berubah tapi layar belum) */
 /* ROUTING = navigasi back/forward -> kembalikan posisi lama; klik baru -> mulai dari atas */
-function restoreScroll(){ window.scrollTo(0, ROUTING ? (SCR[scrKey()] || 0) : 0); }
+/* behavior:"instant" -> abaikan scroll-behavior:smooth di CSS, kalau tidak halaman tampil di atas lalu meluncur sendiri ke posisi lama */
+function restoreScroll(){ window.scrollTo({top: ROUTING ? (SCR[scrKey()] || 0) : 0, left: 0, behavior: "instant"}); }
 
 /* ---------- views ---------- */
 function showHome(){ { const lk = guestLock(); if(lk){ showPage("order", "a", lk); return; } } clearInterval(cdTimer); $("pageView").hidden = true; pushUrl(null); document.title = brandName() + " — Digital Store Otomatis 24 Jam"; $("homeView").hidden = false; $("productView").hidden = true; restoreScroll(); }
@@ -2107,6 +2108,14 @@ $("pgBody").addEventListener("click", e => {
 refreshAll();
 if(!routeFromUrl(true)){ flash("Produk tidak ditemukan."); try{ history.replaceState({}, "", urlFor(null)); }catch(_){} }
 LOAD_ON = true;
+/* halaman dimuat ulang saat back/reload (mis. aplikasi terpasang membuang halaman di memori) -> kembali ke posisi scroll terakhir */
+try{
+  const nav = performance.getEntriesByType("navigation")[0], t = nav && nav.type;
+  if((t === "back_forward" || t === "reload") && !$("homeView").hidden){
+    const y = SCR[scrKey()] || 0;
+    if(y > 0){ const go = () => window.scrollTo({top: y, left: 0, behavior: "instant"}); go(); setTimeout(go, 150); setTimeout(go, 500); window.addEventListener("load", go, {once:true}); }
+  }
+}catch(_){}
 
 
 /* ---------- jaring pengaman: kabari pengguna bila ada error tak terduga ---------- */
@@ -2137,25 +2146,60 @@ LOAD_ON = true;
 <script>
 /* ---------- efek suara (2 bunyi): MAJU = beli / titik 3 / masuk halaman, MUNDUR = kembali ---------- */
 (function(){
-  var AC=null;
-  function ctx(){
-    if(!AC){ var C=window.AudioContext||window.webkitAudioContext; if(!C) return null; try{ AC=new C(); }catch(_){ return null; } }
-    if(AC.state==="suspended") AC.resume();
+  var AC=null, last=0, UNLOCKED=false;
+  var SEQ={ maju:[[520,780,0,.09,.18],[780,1040,.07,.12,.16]], mundur:[[720,480,0,.09,.18],[480,320,.07,.12,.16]] };
+  function mk(){
+    if(AC) return AC;
+    var C=window.AudioContext||window.webkitAudioContext; if(!C) return null;
+    try{ AC=new C(); }catch(_){ AC=null; }
     return AC;
   }
-  function tone(c,t,f1,f2,dur,vol){
-    var o=c.createOscillator(), g=c.createGain();
-    o.type="sine"; o.frequency.setValueAtTime(f1,t); o.frequency.exponentialRampToValueAtTime(f2,t+dur);
-    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
-    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+dur+0.02);
+  function tone(c,t,a){
+    var o=c.createOscillator(), g=c.createGain(), f1=a[0], f2=a[1], d=a[3], v=a[4]; t+=a[2];
+    o.type="sine"; o.frequency.setValueAtTime(f1,t); o.frequency.exponentialRampToValueAtTime(f2,t+d);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(v,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+d+0.02);
   }
-  var SFX={
-    /* bunyi 1: naik, cerah */
-    maju:function(c){ var t=c.currentTime; tone(c,t,520,780,.09,.18); tone(c,t+.07,780,1040,.12,.16); },
-    /* bunyi 2: turun, lembut */
-    mundur:function(c){ var t=c.currentTime; tone(c,t,720,480,.09,.18); tone(c,t+.07,480,320,.12,.16); }
-  };
-  function play(n){ try{ var c=ctx(); if(c) SFX[n](c); }catch(_){} }
+  /* cadangan: kalau Web Audio tidak ada/gagal (sebagian browser/aplikasi), bunyi lewat <audio> berisi WAV buatan sendiri */
+  var WAV={};
+  function wav(n){
+    if(WAV[n]) return WAV[n];
+    var sr=22050, len=Math.floor(sr*.22), buf=new ArrayBuffer(44+len*2), dv=new DataView(buf);
+    function w(o,str){ for(var k=0;k<str.length;k++) dv.setUint8(o+k,str.charCodeAt(k)); }
+    w(0,"RIFF"); dv.setUint32(4,36+len*2,true); w(8,"WAVEfmt "); dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+    dv.setUint32(24,sr,true); dv.setUint32(28,sr*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true); w(36,"data"); dv.setUint32(40,len*2,true);
+    SEQ[n].forEach(function(a){
+      var st=Math.floor(a[2]*sr), dl=Math.floor(a[3]*sr), ph=0;
+      for(var k=0;k<dl&&st+k<len;k++){
+        var x=k/dl, f=a[0]*Math.pow(a[1]/a[0],x), env=Math.min(1,k/(sr*.01))*Math.pow(1-x,2);
+        ph+=2*Math.PI*f/sr; var v=Math.sin(ph)*env*a[4]*2.2;
+        dv.setInt16(44+(st+k)*2, Math.max(-1,Math.min(1,v+dv.getInt16(44+(st+k)*2,true)/32767))*32767, true);
+      }
+    });
+    var bin="", u=new Uint8Array(buf); for(var q=0;q<u.length;q++) bin+=String.fromCharCode(u[q]);
+    return WAV[n]="data:audio/wav;base64,"+btoa(bin);
+  }
+  function fallback(n){ try{ var a=new Audio(wav(n)); a.volume=.8; var pr=a.play(); if(pr&&pr.catch) pr.catch(function(){}); }catch(_){} }
+  function unlock(){
+    var c=mk(); if(!c) return;
+    try{
+      if(c.state!=="running" && c.resume) c.resume();
+      if(!UNLOCKED){ var b=c.createBuffer(1,1,22050), s=c.createBufferSource(); s.buffer=b; s.connect(c.destination); s.start(0); UNLOCKED=true; }
+    }catch(_){}
+  }
+  /* buka kunci audio di sentuhan pertama (wajib di aplikasi/PWA & iOS) */
+  ["pointerdown","touchstart","touchend","click","keydown"].forEach(function(ev){ document.addEventListener(ev,unlock,{capture:true,passive:true}); });
+  document.addEventListener("visibilitychange",function(){ if(!document.hidden && AC && AC.state!=="running"){ try{ AC.resume(); }catch(_){} } });
+  function play(n){
+    last=Date.now();
+    try{
+      var c=mk(); if(!c){ fallback(n); return; }
+      var go=function(){ var t=c.currentTime; SEQ[n].forEach(function(a){ tone(c,t,a); }); };
+      if(c.state==="running"){ go(); }
+      else if(c.resume){ c.resume().then(function(){ if(c.state==="running") go(); else fallback(n); },function(){ fallback(n); }); }
+      else fallback(n);
+    }catch(_){ fallback(n); }
+  }
   window.playSfx=play;
   var BACK="#back,#pgBack,#closeD,[data-act='home'],[data-close]";
   var FWD="#menuBtn,.go,#drawer button,#drawer a";
@@ -2164,6 +2208,8 @@ LOAD_ON = true;
     if(t.closest(BACK)) play("mundur");
     else if(t.closest(FWD)) play("maju");
   },true);
+  /* tombol back HP / swipe / panah back browser juga berbunyi (kalau belum ada bunyi dari tombol di layar) */
+  window.addEventListener("popstate",function(){ if(Date.now()-last>600) play("mundur"); });
 })();
 </script>
 </body>
