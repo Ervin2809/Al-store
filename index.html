@@ -1127,12 +1127,20 @@ async function installApp(){
     ? "1. Buka lewat Safari.\n2. Tekan tombol Bagikan.\n3. Pilih \"Tambah ke Layar Utama\"."
     : "Popup instal belum tersedia di browser ini.\n1. Buka situs lewat Chrome (alamat https).\n2. Buka menu browser (titik tiga).\n3. Pilih \"Instal aplikasi\" atau \"Tambahkan ke layar utama\".");
 }
+/* kembali dari halaman yang dibuka lewat menu titik 3 -> menu titik 3 terbuka lagi */
+let DRAWER_RET = false, REOPEN = false;
+function maybeReopenDrawer(){
+  if(!REOPEN) return; REOPEN = false;
+  if(DRAWER_RET && USER && !$("homeView").hidden && $("drawer").hidden && $("modal").hidden){ DRAWER_RET = false; openDrawer(); }
+}
+const DM_PAGES = ["admin","adminguide","topup","hist","track","vault","guide","lb","like"];
 const DM_WA = {
   key:"Halo admin, saya mau reset key.\nProduk: \nKey: "
 };
 $("drawer").addEventListener("click", e => {
   const a = e.target.closest("[data-dm]"); if(!a) return;
   e.preventDefault(); const k = a.dataset.dm;
+  if(DM_PAGES.indexOf(k) > -1) DRAWER_RET = true;
   if(DM_WA[k]) window.open(waLink(DM_WA[k]), "_blank", "noopener");
   else if(k === "admin") showPage("admin");
   else if(k === "adminguide") showPage("adminguide");
@@ -1215,14 +1223,14 @@ function routeFromUrl(initial){
     if(!initial && (!$("modal").hidden || !$("drawer").hidden)) closeAll();
     if(sl){ const p = DB.products.find(x => x.slug === sl); if(p){ openProduct(p.id); return true; } if(initial) return false; showHome(); return true; }
     if(hal && openBySlug(hal)) return true;
-    if(!$("productView").hidden || !$("pageView").hidden){ closeAll(); showHome(); }
+    if(!$("productView").hidden || !$("pageView").hidden){ closeAll(); showHome(); REOPEN = true; }
     else if(!$("modal").hidden) closeAll();
     return true;
   } finally { ROUTING = false; }
 }
 window.addEventListener("popstate", () => {
   if(STALE){ STALE = 0; history.back(); return; }   /* lewati entri overlay yang sudah tertutup */
-  OV_HIST = false; routeFromUrl(false);
+  OV_HIST = false; routeFromUrl(false); maybeReopenDrawer();
 });
 try{ if(HTTPS_OK()) history.replaceState({n: (history.state && history.state.n) || 0}, "", location.href); }catch(_){}
 document.addEventListener("click", async e => {
@@ -1246,7 +1254,7 @@ function showHome(){ { const lk = guestLock(); if(lk){ showPage("order", "a", lk
 function fillBuyer(){ $("who").textContent = S.guest ? "@" + S.guest : ""; }
 function openProduct(id){
   { const lk = guestLock(); if(lk){ showPage("order", "a", lk); flash("Selesaikan pesananmu dulu. Tekan Kembali ke Beranda kalau sudah selesai."); return; } }
-  S.pid = id; S.pkg = 0; S.qty = 1; S.tab = "buy"; $("err").textContent = "";
+  DRAWER_RET = false; S.pid = id; S.pkg = 0; S.qty = 1; S.tab = "buy"; $("err").textContent = "";
   const p = prod();
   $("pcard").innerHTML = `${tile(p)}<div><h2>${esc(p.name)}</h2><span class="badge">${esc(p.platform)}</span></div>`;
   clearInterval(cdTimer); $("pageView").hidden = true;
@@ -2027,7 +2035,7 @@ function trackOrder(id){
   out.innerHTML = o ? orderCard(o) + `<p class="mut">Status diperbarui admin. Tanya admin bila pesananmu belum diproses.</p>`
     : `<div class="pgcard"><p class="mut">ID ini tidak ditemukan di perangkat ini. Kirim ID ke admin untuk dicek.</p><a class="cta" style="text-decoration:none" target="_blank" rel="noopener" href="${waLink("Halo admin, saya mau lacak pesanan.\nID Pesanan: " + id)}">Tanya admin</a></div>`;
 }
-$("pgBack").onclick = () => goBack(() => { if(PG.name === "guide" && PG.oid){ PG.oid = ""; PG.plat = ""; renderPage(); window.scrollTo(0, 0); replaceUrl(null, "panduan"); } else leavePage(); });
+$("pgBack").onclick = () => goBack(() => { if(PG.name === "guide" && PG.oid){ PG.oid = ""; PG.plat = ""; renderPage(); window.scrollTo(0, 0); replaceUrl(null, "panduan"); } else { leavePage(); REOPEN = true; maybeReopenDrawer(); } });
 $("pgBody").addEventListener("input", e => {
   if(e.target.id === "kq"){ PG.q = e.target.value; fillKeys(); return; }
   if(e.target.id === "gq"){ PG.q = e.target.value; fillGuideList(); return; }
@@ -2043,7 +2051,7 @@ $("pgBody").addEventListener("click", e => {
   else if(a === "payview"){ showPage("order", "a", b.dataset.id); }
   else if(a === "trk"){ if(PG.name !== "orders") showPage("orders", "b"); PG.tab = "b"; renderPage(); pushUrl(null, slugOfPage(PG.name, "b")); $("trkIn").value = b.dataset.id; trackOrder(b.dataset.id); }
   else if(a === "track") trackOrder($("trkIn").value);
-  else if(a === "home"){ clearGuestLock(); leavePage(); }
+  else if(a === "home"){ clearGuestLock(); DRAWER_RET = false; leavePage(); }
   else if(a === "hist") showPage("orders", "a");
   else if(a === "guide") showPage("guide", "a", "");
   else if(a === "gopen"){ PG.oid = b.dataset.id; if(PG.name !== "guide"){ showPage("guide", "a", b.dataset.id); } else { PG.plat = ""; renderPage(); window.scrollTo(0, 0); pushUrl(null, "panduan", pgExtra()); } }
