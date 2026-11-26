@@ -528,6 +528,12 @@ html[data-theme="light"] .kbox code{color:#15803d}
 .live i{width:10px;height:10px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:liveb 1.4s ease-in-out infinite}
 @keyframes liveb{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.55)}50%{opacity:.25;box-shadow:0 0 0 6px rgba(34,197,94,0)}}
 @keyframes pulse{50%{box-shadow:0 0 0 6px rgba(245,165,36,.18)}}
+.pprow{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;color:var(--text)}
+.pprow[aria-pressed="true"]{border-color:var(--accent);background:rgba(139,61,245,.14)}
+.pprow .ppn{min-width:0;display:flex;flex-direction:column;gap:2px}
+.pprow .ppn b{font-size:14px}
+.pprow .ppn small{font-size:11px;color:var(--muted)}
+.pprow .ppp{flex:none;font-weight:800;font-size:14px;color:var(--accent-2)}
 </style>
 <style>
 /* splash dalam aplikasi: logo muncul pelan dari redup, 1-2 detik lalu langsung masuk */
@@ -668,6 +674,7 @@ html[data-theme="light"] .kbox code{color:#15803d}
     <a id="mWa" href="#" target="_blank" rel="noopener" role="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 18.7z"/><path d="M9 9.5c.3 2 2.5 4.2 5 5l1.3-1.3-1.8-1-.8.7c-.9-.4-1.7-1.2-2.1-2.1l.7-.8-1-1.8z" fill="currentColor"/></svg><span>WhatsApp Admin</span></a>
     <a href="#" data-dm="vault" role="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/></svg><span>Riwayat Key</span></a>
     <a href="#" data-dm="guide" role="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg><span>Panduan Pasang</span></a>
+    <a href="#" data-dm="ppob" role="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2M10 6h4"/></svg><span>PPOB</span></a>
     <a href="#" data-dm="lb" role="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0z" fill="currentColor"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3M12 14v4M8 20h8"/></svg><span>Leaderboard</span></a>
     <a id="mTheme" href="#" role="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><span>Ganti tema</span></a>
   </nav>
@@ -1138,7 +1145,7 @@ function maybeReopenDrawer(force){
   REOPEN = false;
   if(DRAWER_RET && USER && !$("homeView").hidden && $("drawer").hidden && $("modal").hidden){ DRAWER_RET = false; openDrawer(); }
 }
-const DM_PAGES = ["admin","adminguide","topup","hist","track","vault","guide","lb","like"];
+const DM_PAGES = ["admin","adminguide","topup","hist","track","vault","guide","lb","like","ppob"];
 const DM_WA = {
   key:"Halo admin, saya mau reset key.\nProduk: \nKey: "
 };
@@ -1156,6 +1163,7 @@ $("drawer").addEventListener("click", e => {
   else if(k === "guide") showPage("guide", "a", "");
   else if(k === "lb") showPage("lb");
   else if(k === "like") showPage("like", "a");
+  else if(k === "ppob") showPage("ppob", "a");
   else if(k === "app") installApp();
   else if(k === "app_old") infoModal("Pasang Aplikasi", "1. Buka menu browser (titik tiga).\n2. Pilih \"Tambahkan ke layar utama\" atau \"Install aplikasi\".\n3. Konfirmasi, lalu buka toko dari layar utama.");
   else if(k === "logout"){ runLoad(() => { USER = null; try{ localStorage.removeItem("alstore_user"); }catch(_){} try{ cloudSignOut(); }catch(_){} S.guest = ""; fillBuyer(); closeAll(); syncPay(); flash("Kamu sudah keluar."); if(!$("pageView").hidden || !$("productView").hidden) showHome(); }); }
@@ -1173,7 +1181,7 @@ const PRODUCT_PATHS = false;   // true: /produk/nama-produk (butuh route Worker)
 let ROUTING = false;
 function brandName(){ return [CONFIG.brandA, CONFIG.brandB].filter(Boolean).join(""); }
 /* link per halaman: ?produk=slug | ?halaman=deposit|riwayat|lacak|leaderboard|cek-id|status-like|cara-beli|faq|syarat|privasi */
-const PAGE_SLUGS = {"admin-leaderboard":["adminlb","a",1], "admin-markup":["adminmarkup","a",1], "admin-teks-berjalan":["adminticker","a",1], "admin-platform":["adminplat","a",1], "admin-banner":["adminbanner","a",1], admin:["admin","a",1], "admin-panduan":["adminguide","a",1], panduan:["guide","a",1], "riwayat-key":["keys","a",1], pesanan:["order","a",0], deposit:["deposit","a",1], riwayat:["orders","a",1], lacak:["orders","b",1], leaderboard:["lb","a",0], "cek-id":["like","a",1], "status-like":["like","b",1]};
+const PAGE_SLUGS = {"admin-leaderboard":["adminlb","a",1], "admin-markup":["adminmarkup","a",1], "admin-teks-berjalan":["adminticker","a",1], "admin-platform":["adminplat","a",1], "admin-banner":["adminbanner","a",1], admin:["admin","a",1], "admin-panduan":["adminguide","a",1], panduan:["guide","a",1], "riwayat-key":["keys","a",1], pesanan:["order","a",0], deposit:["deposit","a",1], riwayat:["orders","a",1], lacak:["orders","b",1], leaderboard:["lb","a",0], "cek-id":["like","a",1], "status-like":["like","b",1], ppob:["ppob","a",1], "riwayat-ppob":["ppob","b",1]};
 const INFO_SLUGS = {"cara-beli":"how", faq:"faq", syarat:"terms", privasi:"privacy"};
 const slugOfPage = (n, t) => Object.keys(PAGE_SLUGS).find(k => PAGE_SLUGS[k][0] === n && PAGE_SLUGS[k][1] === (t || "a")) || "";
 const slugOfInfo = k => Object.keys(INFO_SLUGS).find(x => INFO_SLUGS[x] === k) || "";
@@ -1378,6 +1386,82 @@ function refreshAll(){
 }
 
 /* ---------- halaman menu: isi saldo, pesanan, leaderboard, auto like ---------- */
+/* ---------- PPOB: produk dari API penyedia ---------- */
+const PP_API = {
+  url: "https://udubryszxdbtbevvbbum.supabase.co/functions/v1/ppob-pricelist",   // Edge Function Supabase (API key Melo disimpan di server, bukan di sini)
+  headers: {apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkdWJyeXN6eGRidGJldnZiYnVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NTM2NDAsImV4cCI6MjEwODIyOTY0MH0.iyfdnywe1SD8ZfrOWmA7Tl40xq-EAnzDgFI8mEmTWv4", Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkdWJyeXN6eGRidGJldnZiYnVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NTM2NDAsImV4cCI6MjEwODIyOTY0MH0.iyfdnywe1SD8ZfrOWmA7Tl40xq-EAnzDgFI8mEmTWv4"},   // anon key Supabase (aman dipublikasikan)
+  markupPct: 0,       // keuntungan persen dari harga modal
+  markupFlat: 0       // keuntungan tetap (Rp) per produk
+};
+const PP_CATS = [
+  {id:"topup", name:"Top Up", ph:"No. HP / ID akun", zone:false},
+  {id:"game", name:"Game", ph:"User ID game", zone:true},
+  {id:"pulsa", name:"Pulsa", ph:"No. HP, mis. 08123456789", zone:false},
+  {id:"data", name:"Data", ph:"No. HP, mis. 08123456789", zone:false}
+];
+/* contoh data (format mirip Digiflazz). Format lain juga bisa: id/sku/code, name/product_name, price/harga, brand, category */
+const PP_DEMO = [
+  {buyer_sku_code:"dana10", product_name:"DANA 10.000", category:"E-Money", brand:"DANA", price:10500},
+  {buyer_sku_code:"dana50", product_name:"DANA 50.000", category:"E-Money", brand:"DANA", price:50700},
+  {buyer_sku_code:"ovo20", product_name:"OVO 20.000", category:"E-Money", brand:"OVO", price:20600},
+  {buyer_sku_code:"gopay25", product_name:"GoPay 25.000", category:"E-Money", brand:"GOPAY", price:25600},
+  {buyer_sku_code:"ff70", product_name:"Free Fire 70 Diamond", category:"Games", brand:"FREE FIRE", price:9800},
+  {buyer_sku_code:"ff140", product_name:"Free Fire 140 Diamond", category:"Games", brand:"FREE FIRE", price:19200},
+  {buyer_sku_code:"ml86", product_name:"Mobile Legends 86 Diamond", category:"Games", brand:"MOBILE LEGENDS", price:22000},
+  {buyer_sku_code:"ml172", product_name:"Mobile Legends 172 Diamond", category:"Games", brand:"MOBILE LEGENDS", price:43500},
+  {buyer_sku_code:"tsel10", product_name:"Telkomsel 10.000", category:"Pulsa", brand:"TELKOMSEL", price:10900},
+  {buyer_sku_code:"tsel25", product_name:"Telkomsel 25.000", category:"Pulsa", brand:"TELKOMSEL", price:25600},
+  {buyer_sku_code:"xl10", product_name:"XL 10.000", category:"Pulsa", brand:"XL", price:10800},
+  {buyer_sku_code:"tseld3", product_name:"Telkomsel Data 3GB 30 Hari", category:"Data", brand:"TELKOMSEL", price:27500},
+  {buyer_sku_code:"xld5", product_name:"XL Data 5GB 30 Hari", category:"Data", brand:"XL", price:38000}
+];
+const PPD = {list:[], loaded:false, loading:false, err:"", demo:false};
+function ppCatOf(r){
+  const s = String(r.category || r.type || r.kategori || "").toLowerCase();
+  if(/data|internet|paket/.test(s)) return "data";
+  if(/pulsa|telepon|sms/.test(s)) return "pulsa";
+  if(/game|voucher/.test(s)) return "game";
+  return "topup";
+}
+function normPP(r){
+  if(!r || typeof r !== "object") return null;
+  const id = String(r.buyer_sku_code || r.sku || r.code || r.id || ""), name = String(r.product_name || r.name || r.title || "");
+  const base = +(r.price != null ? r.price : (r.selling_price != null ? r.selling_price : r.harga));
+  if(!id || !name || !(base > 0)) return null;
+  if(r.seller_product_status === false || r.buyer_product_status === false || r.active === false || /gangguan|kosong|nonaktif|inactive/i.test(String(r.status || ""))) return null;
+  const price = Math.ceil(base * (1 + (+PP_API.markupPct || 0) / 100) + (+PP_API.markupFlat || 0));
+  return {id, name, brand: String(r.brand || r.provider || name.split(" ")[0] || "Lainnya").toUpperCase(), cat: ppCatOf(r), price};
+}
+async function ppLoad(){
+  if(PPD.loading) return;
+  PPD.loading = true; PPD.err = "";
+  try{
+    if(PP_API.url){
+      const r = await fetch(PP_API.url, {headers: PP_API.headers || {}});
+      if(!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json();
+      const arr = Array.isArray(j) ? j : (j.data || j.products || []);
+      PPD.list = arr.map(normPP).filter(Boolean); PPD.demo = false;
+    } else { PPD.list = PP_DEMO.map(normPP).filter(Boolean); PPD.demo = true; }
+    PPD.loaded = true;
+  }catch(e){ PPD.err = "Produk gagal dimuat. Coba lagi."; }
+  PPD.loading = false;
+  if(!$("pageView").hidden && PG.name === "ppob") renderPage();
+}
+function ppListHTML(){
+  if(PPD.loading) return `<p class="empty">Memuat produk…</p>`;
+  if(PPD.err) return `<p class="empty">${esc(PPD.err)}</p><button type="button" class="cta" data-act="ppretry">Muat ulang</button>`;
+  if(PPD.demo && !isAdmin()) return `<p class="empty">Produk belum tersedia.</p>`;
+  const q = (PG.q || "").trim().toLowerCase();
+  const l = PPD.list.filter(x => x.cat === PG.cat && (!PG.brand || x.brand === PG.brand) && (!q || x.name.toLowerCase().includes(q) || x.brand.toLowerCase().includes(q))).sort((a, b) => a.price - b.price);
+  if(!l.length) return `<p class="empty">${q ? "Produk tidak ditemukan." : "Belum ada produk di kategori ini."}</p>`;
+  return l.slice(0, 80).map(x => `<button type="button" class="pprow" data-act="ppsel" data-id="${esc(x.id)}" aria-pressed="${PG.sel === x.id}"><span class="ppn"><b>${esc(x.name)}</b><small>${esc(x.brand)}</small></span><span class="ppp">${rp(x.price)}</span></button>`).join("") + (l.length > 80 ? `<p class="mut" style="text-align:center">Menampilkan 80 dari ${l.length} produk. Pakai pencarian untuk mempersempit.</p>` : "");
+}
+document.addEventListener("input", e => {
+  if(e.target.id === "ppQ"){ PG.q = e.target.value; const el = $("ppList"); if(el) el.innerHTML = ppListHTML(); }
+  else if(e.target.id === "ppNo") PG.ppno = e.target.value;
+  else if(e.target.id === "ppZone") PG.ppzone = e.target.value;
+});
 const DEPOSIT = {min:1000, max:5000000, quick:[10000,20000,50000,100000,200000,500000], bonusText:""}; // bonusText: isi promo bonus jika ada
 const LEADERBOARD = {top:[], last:[]}; // isi: [{name:"ab***", orders:12, total:"Rp 50.000"}] (urut peringkat 1 dst)
 const lsGet = (k, d) => { try{ const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; }catch(_){ return d; } };
@@ -1395,6 +1479,7 @@ const IC = {
   xflag:ic('<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>'),
   xplay:ic('<circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/>'),
   xext:ic('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'),
+  xphone:ic('<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>'),
   xwrench:ic('<path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7 6.3 21l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>'),
   xcube:ic('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9"/>'),
   xhead:ic('<path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v5H5a1 1 0 0 1-1-1zM20 14h-3v5h2a1 1 0 0 0 1-1z"/>'),
@@ -1495,6 +1580,30 @@ function renderPage(){
     renderGuidePage(body);
   } else if(n === "keys"){
     renderKeysPage(body);
+  } else if(n === "ppob"){
+    $("pgTitle").textContent = "PPOB";
+    if(!PG.cat) PG.cat = PP_CATS[0].id;
+    const head = `<h2 class="pgh">PPOB</h2><p class="mut">Top up, game, pulsa &amp; paket data. Pesanan diproses admin lewat WhatsApp.</p>${seg("Beli", "Riwayat")}`;
+    if(PG.tab === "b"){
+      const l = lsGet("alstore_ppob", []);
+      body.innerHTML = head + `<div class="pgcard"><h4 class="ph">${IC.hist}Riwayat permintaan</h4>${l.length ? l.map(x => `<div class="hist"><b>${esc(x.name || x.cat)}${x.price ? " · " + rp(x.price) : ""}</b><small>${esc(x.no)} · ${esc(fmtDate(x.ts))}</small></div>`).join("") : `<p class="empty">Belum ada permintaan PPOB.</p>`}</div>`;
+    } else {
+      const cat = PP_CATS.find(c => c.id === PG.cat) || PP_CATS[0];
+      const brands = [...new Set(PPD.list.filter(x => x.cat === cat.id).map(x => x.brand))].sort();
+      const sel = PPD.list.find(x => x.id === PG.sel && x.cat === cat.id);
+      body.innerHTML = head
+        + (PPD.demo && isAdmin() ? `<div class="pgcard"><p class="mut">Mode contoh (hanya admin yang melihat ini). Isi <b>PP_API.url</b> di kode agar produk diambil dari penyedia API.</p></div>` : "")
+        + `<div class="pills">${PP_CATS.map(c => `<button type="button" class="pill" data-act="ppcat" data-id="${c.id}" aria-pressed="${c.id === cat.id}">${esc(c.name)}</button>`).join("")}</div>`
+        + (brands.length > 1 ? `<div class="pills"><button type="button" class="pill" data-act="ppbrand" data-b="" aria-pressed="${!PG.brand}">Semua</button>${brands.map(b => `<button type="button" class="pill" data-act="ppbrand" data-b="${esc(b)}" aria-pressed="${PG.brand === b}">${esc(b)}</button>`).join("")}</div>` : "")
+        + (sel ? `<div class="pgcard" id="ppForm"><h4 class="ph">${IC.bolt}${esc(sel.name)}</h4><p class="mut" style="margin:0 0 10px">${esc(sel.brand)} · <b>${rp(sel.price)}</b></p>
+            <label class="lb" for="ppNo">${esc(cat.ph)}</label><input class="in" id="ppNo" inputmode="numeric" autocomplete="off" placeholder="${esc(cat.ph)}" value="${esc(PG.ppno || "")}">
+            ${cat.zone ? `<label class="lb" for="ppZone" style="margin-top:10px">Zone / Server ID (jika ada)</label><input class="in" id="ppZone" inputmode="numeric" autocomplete="off" placeholder="mis. 2001" value="${esc(PG.ppzone || "")}">` : ""}
+            <div class="err" id="ppErr" role="alert"></div>
+            <button type="button" class="cta" data-act="ppob">${IC.bolt}Pesan via WhatsApp</button></div>` : "")
+        + `<input class="in" id="ppQ" type="search" placeholder="Cari produk…" autocomplete="off" value="${esc(PG.q || "")}" style="margin-bottom:10px">`
+        + `<div id="ppList">${ppListHTML()}</div>`;
+      if(!PPD.loaded && !PPD.loading && !PPD.err) ppLoad();
+    }
   } else if(n === "like"){
     $("pgTitle").textContent = "Auto Like Free Fire";
     body.innerHTML = `<h2 class="pgh">Auto Like Free Fire</h2><p class="mut">Cek ID pemain dan pantau pengiriman like harian pesananmu lewat admin.</p>
@@ -2160,6 +2269,21 @@ $("pgBody").addEventListener("click", e => {
     er.textContent = "";
     const l = lsGet("alstore_deps", []); l.unshift({amount:v, ts:Date.now()}); lsSet("alstore_deps", l.slice(0, 50));
     window.open(waLink("Halo admin, saya mau isi saldo.\nNominal: " + rp(v)), "_blank", "noopener"); renderPage();
+  }
+  else if(a === "ppcat"){ PG.cat = b.dataset.id; PG.brand = ""; PG.sel = ""; PG.q = ""; PG.ppno = ""; PG.ppzone = ""; renderPage(); }
+  else if(a === "ppbrand"){ PG.brand = b.dataset.b; renderPage(); }
+  else if(a === "ppsel"){ PG.sel = b.dataset.id; renderPage(); const f = $("ppForm"); if(f) f.scrollIntoView({block:"center"}); }
+  else if(a === "ppretry"){ PPD.err = ""; renderPage(); }
+  else if(a === "ppob"){
+    const x = PPD.list.find(v => v.id === PG.sel), er = $("ppErr");
+    if(!x) return;
+    const cat = PP_CATS.find(c => c.id === x.cat) || PP_CATS[0];
+    const no = $("ppNo").value.replace(/\D/g, ""), zone = $("ppZone") ? $("ppZone").value.replace(/\D/g, "").slice(0, 8) : "";
+    if(no.length < 5 || no.length > 20){ er.textContent = "Nomor / ID tujuan tidak valid."; return; }
+    er.textContent = "";
+    const l = lsGet("alstore_ppob", []); l.unshift({cat:cat.name, name:x.name, no:no + (zone ? " (" + zone + ")" : ""), price:x.price, ts:Date.now()}); lsSet("alstore_ppob", l.slice(0, 50));
+    window.open(waLink("Halo admin, saya mau order PPOB.\nKategori: " + cat.name + "\nProduk: " + x.name + "\nKode: " + x.id + "\nTujuan: " + no + (zone ? "\nZone/Server: " + zone : "") + "\nHarga: " + rp(x.price)), "_blank", "noopener");
+    renderPage();
   }
   else if(a === "like"){
     const u = $("uidIn").value.replace(/\D/g, ""), er = $("uidErr");
