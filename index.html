@@ -1115,6 +1115,7 @@ function renderAdminPage(body){
     <button type="button" class="cta" data-gonav="adminguide" style="margin-top:10px">Kelola Link Panduan</button>
     <button type="button" class="cta" data-gonav="adminticker" style="margin-top:10px">Edit Teks Berjalan</button>
     <button type="button" class="cta" data-gonav="adminplat" style="margin-top:10px">Label Platform Produk</button>
+    <button type="button" class="cta" data-gonav="adminsaldo" style="margin-top:10px">Saldo &amp; Order PPOB</button>
     <div class="pgcard" style="margin-top:14px"><h4 class="ph">Pesanan terbaru</h4>${orders.length ? orders.slice(0, 20).map(o => `<div class="hist"><b>${esc(o.name)}</b> · ${esc(o.pkg)} x${+o.qty}<br><small>${esc(o.id)} · ${rp(o.total)} · ${esc(o.status)}</small></div>`).join("") : `<p class="mut">Belum ada pesanan.</p>`}</div>
     <div class="pgcard"><h4 class="ph">Deposit terbaru</h4>${deps.length ? deps.slice(0, 20).map(d => `<div class="hist"><b>${rp(d.amount)}</b><br><small>${esc(fmtDate(d.ts))}</small></div>`).join("") : `<p class="mut">Belum ada deposit.</p>`}</div>
     <a class="cta" style="text-decoration:none" href="${waLink("Halo admin.")}" target="_blank" rel="noopener">Buka WhatsApp Admin</a>`;
@@ -1181,7 +1182,7 @@ const PRODUCT_PATHS = false;   // true: /produk/nama-produk (butuh route Worker)
 let ROUTING = false;
 function brandName(){ return [CONFIG.brandA, CONFIG.brandB].filter(Boolean).join(""); }
 /* link per halaman: ?produk=slug | ?halaman=deposit|riwayat|lacak|leaderboard|cek-id|status-like|cara-beli|faq|syarat|privasi */
-const PAGE_SLUGS = {"admin-leaderboard":["adminlb","a",1], "admin-markup":["adminmarkup","a",1], "admin-teks-berjalan":["adminticker","a",1], "admin-platform":["adminplat","a",1], "admin-banner":["adminbanner","a",1], admin:["admin","a",1], "admin-panduan":["adminguide","a",1], panduan:["guide","a",1], "riwayat-key":["keys","a",1], pesanan:["order","a",0], deposit:["deposit","a",1], riwayat:["orders","a",1], lacak:["orders","b",1], leaderboard:["lb","a",0], "cek-id":["like","a",1], "status-like":["like","b",1], ppob:["ppob","a",1], "riwayat-ppob":["ppob","b",1]};
+const PAGE_SLUGS = {"admin-leaderboard":["adminlb","a",1], "admin-markup":["adminmarkup","a",1], "admin-teks-berjalan":["adminticker","a",1], "admin-platform":["adminplat","a",1], "admin-banner":["adminbanner","a",1], "admin-saldo":["adminsaldo","a",1], admin:["admin","a",1], "admin-panduan":["adminguide","a",1], panduan:["guide","a",1], "riwayat-key":["keys","a",1], pesanan:["order","a",0], deposit:["deposit","a",1], riwayat:["orders","a",1], lacak:["orders","b",1], leaderboard:["lb","a",0], "cek-id":["like","a",1], "status-like":["like","b",1], ppob:["ppob","a",1], "riwayat-ppob":["ppob","b",1]};
 const INFO_SLUGS = {"cara-beli":"how", faq:"faq", syarat:"terms", privasi:"privacy"};
 const slugOfPage = (n, t) => Object.keys(PAGE_SLUGS).find(k => PAGE_SLUGS[k][0] === n && PAGE_SLUGS[k][1] === (t || "a")) || "";
 const slugOfInfo = k => Object.keys(INFO_SLUGS).find(x => INFO_SLUGS[x] === k) || "";
@@ -1388,13 +1389,13 @@ function refreshAll(){
 /* ---------- halaman menu: isi saldo, pesanan, leaderboard, auto like ---------- */
 /* ---------- PPOB: produk dari API penyedia ---------- */
 const PP_API = {
-  url: "https://udubryszxdbtbevvbbum.supabase.co/functions/v1/ppob-pricelist",   // Edge Function Supabase (API key Melo disimpan di server, bukan di sini)
+  url: "https://udubryszxdbtbevvbbum.supabase.co/functions/v1/ppob",   // Edge Function Supabase (API key Melo disimpan di server)
   headers: {apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkdWJyeXN6eGRidGJldnZiYnVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NTM2NDAsImV4cCI6MjEwODIyOTY0MH0.iyfdnywe1SD8ZfrOWmA7Tl40xq-EAnzDgFI8mEmTWv4", Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkdWJyeXN6eGRidGJldnZiYnVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NTM2NDAsImV4cCI6MjEwODIyOTY0MH0.iyfdnywe1SD8ZfrOWmA7Tl40xq-EAnzDgFI8mEmTWv4"},   // anon key Supabase (aman dipublikasikan)
-  markupPct: 0,       // keuntungan persen dari harga modal
-  markupFlat: 0       // keuntungan tetap (Rp) per produk
+  markupPct: 0,       // JANGAN diisi di sini: untung diatur di server (tabel ppob_settings), harga dari server sudah termasuk untung
+  markupFlat: 0
 };
 const PP_CATS = [
-  {id:"topup", name:"Top Up", ph:"No. HP / ID akun", zone:false},
+  {id:"topup", name:"E-Wallet", ph:"No. HP e-wallet, mis. 08123456789", zone:false},
   {id:"game", name:"Game", ph:"User ID game", zone:true},
   {id:"pulsa", name:"Pulsa", ph:"No. HP, mis. 08123456789", zone:false},
   {id:"data", name:"Data", ph:"No. HP, mis. 08123456789", zone:false}
@@ -1415,6 +1416,135 @@ const PP_DEMO = [
   {buyer_sku_code:"tseld3", product_name:"Telkomsel Data 3GB 30 Hari", category:"Data", brand:"TELKOMSEL", price:27500},
   {buyer_sku_code:"xld5", product_name:"XL Data 5GB 30 Hari", category:"Data", brand:"XL", price:38000}
 ];
+
+/* ---------- PPOB server: saldo, order otomatis, riwayat ---------- */
+const PPX = {saldo: null, orders: [], loaded: false, loading: false, busy: false, t: 0, timer: null, chs: null, deb: 0};
+async function ppSession(){
+  const sb = await cloudClient(); if(!sb) return null;
+  const r = await sb.auth.getSession();
+  return r && r.data && r.data.session ? {sb, session: r.data.session} : null;
+}
+async function ppCall(body){
+  const s = await ppSession(); if(!s){ const e = new Error("LOGIN"); e.status = 401; throw e; }
+  const r = await fetch(PP_API.url, {method: "POST", headers: {"Content-Type": "application/json", apikey: CONFIG.supabaseKey, Authorization: "Bearer " + s.session.access_token}, body: JSON.stringify(body)});
+  let j = {}; try{ j = await r.json(); }catch(_){}
+  if(!r.ok){ const e = new Error(j.error || "Gagal memproses. Coba lagi."); e.status = r.status; throw e; }
+  return j;
+}
+function ppErr(e){ return e && (e.status === 401 || e.message === "LOGIN") ? "Order PPOB butuh login Google. Keluar lalu masuk lagi pakai Google." : (e && e.message) || "Gagal memproses. Coba lagi."; }
+function ppSaldoText(){ return PPX.saldo != null ? rp(PPX.saldo) : (PPX.loaded ? "—" : "Memuat…"); }
+function ppHistHTML(){
+  if(!PPX.loaded) return `<p class="empty">Memuat…</p>`;
+  if(PPX.saldo == null) return `<p class="empty">Masuk dengan Google untuk melihat riwayat PPOB.</p>`;
+  if(!PPX.orders.length) return `<p class="empty">Belum ada pesanan PPOB.</p>`;
+  const lab = {pending: "Diproses", processing: "Diproses", success: "Berhasil", failed: "Gagal"};
+  return PPX.orders.map(o => `<div class="hist"><b>${esc(o.product_name)} · ${rp(o.price)}</b><small>${esc(o.target)}${o.zone ? " (" + esc(o.zone) + ")" : ""} · ${esc(fmtDate(o.created_at))} · <b>${lab[o.status] || esc(o.status)}</b></small>`
+    + (o.status === "success" && o.serial_number ? `<small>SN: ${esc(o.serial_number)}</small>` : "")
+    + (o.status === "failed" ? `<small>${esc(o.error || "Gagal diproses")}</small>` : "") + `</div>`).join("");
+}
+function ppRerender(){
+  const s = $("ppSaldo"); if(s) s.textContent = ppSaldoText();
+  const h = $("ppHist"); if(h) h.innerHTML = ppHistHTML();
+}
+function ppReset(){
+  PPX.saldo = null; PPX.orders = []; PPX.loaded = false; PPX.t = 0;
+  if(PPX.timer){ clearInterval(PPX.timer); PPX.timer = null; }
+  if(PPX.chs){ try{ PPX.chs.forEach(c => c.unsubscribe()); }catch(_){} PPX.chs = null; }
+  ppRerender();
+}
+async function ppTick(){
+  if(document.hidden) return;
+  try{ await ppCall({action: "refresh"}); }catch(_){}
+  ppLoadMine();
+}
+function ppWatch(s){
+  if(PPX.chs || !s) return;
+  const uid = s.session.user.id, on = () => { clearTimeout(PPX.deb); PPX.deb = setTimeout(ppLoadMine, 400); };
+  PPX.chs = [
+    s.sb.channel("pp_orders_" + uid).on("postgres_changes", {event: "*", schema: "public", table: "ppob_orders", filter: "user_id=eq." + uid}, on).subscribe(),
+    s.sb.channel("pp_prof_" + uid).on("postgres_changes", {event: "*", schema: "public", table: "profiles", filter: "id=eq." + uid}, on).subscribe()
+  ];
+}
+async function ppLoadMine(){
+  if(PPX.loading) return;
+  PPX.loading = true; PPX.t = Date.now();
+  try{
+    const s = await ppSession();
+    if(!s){ PPX.saldo = null; PPX.orders = []; }
+    else{
+      const [p, o] = await Promise.all([
+        s.sb.from("profiles").select("saldo").eq("id", s.session.user.id).maybeSingle(),
+        s.sb.from("ppob_orders").select("id,product_name,brand,target,zone,price,status,serial_number,error,created_at").order("created_at", {ascending: false}).limit(30)
+      ]);
+      PPX.saldo = p.data ? +p.data.saldo : 0; PPX.orders = o.data || [];
+      ppWatch(s);
+    }
+  }catch(_){}
+  PPX.loaded = true; PPX.loading = false;
+  const pend = PPX.orders.some(o => o.status === "pending" || o.status === "processing");
+  if(pend && !PPX.timer) PPX.timer = setInterval(ppTick, 20000);
+  if(!pend && PPX.timer){ clearInterval(PPX.timer); PPX.timer = null; }
+  ppRerender();
+}
+async function ppBuy(){
+  if(PPX.busy) return;
+  const x = PPD.list.find(v => v.id === PG.sel), er = $("ppErr"); if(!x || !er) return;
+  const no = $("ppNo").value.replace(/\D/g, ""), zone = $("ppZone") ? $("ppZone").value.replace(/\D/g, "").slice(0, 8) : "";
+  if(no.length < 5 || no.length > 20){ er.textContent = "Nomor / ID tujuan tidak valid."; return; }
+  if(x.z && !zone){ er.textContent = "Zone / Server wajib diisi untuk produk ini."; return; }
+  er.textContent = "";
+  if(!USER){ openLogin(); flash("Masuk dulu untuk membeli PPOB."); return; }
+  const s = await ppSession();
+  if(!s){ er.textContent = "Order PPOB butuh login Google. Keluar lalu masuk lagi pakai Google."; return; }
+  if(PPX.saldo != null && PPX.saldo < x.price){ er.textContent = "Saldo PPOB kurang (" + rp(PPX.saldo) + "). Isi saldo dulu."; return; }
+  if(!confirm("Beli " + x.name + "\nTujuan: " + no + (zone ? " (" + zone + ")" : "") + "\nHarga: " + rp(x.price) + "\n\nSaldo PPOB akan dipotong. Lanjut?")) return;
+  PPX.busy = true; const btn = document.querySelector('[data-act="ppob"]'); if(btn) btn.disabled = true;
+  try{
+    const j = await ppCall({action: "order", sku: x.id, target: no, zone});
+    flash(j.message || "Pesanan diproses.");
+    PG.tab = "b"; PG.sel = ""; PG.ppno = ""; PG.ppzone = "";
+    await ppLoadMine(); renderPage();
+  }catch(e){ er.textContent = ppErr(e); if(btn) btn.disabled = false; }
+  PPX.busy = false;
+}
+
+/* ---------- Admin: tambah saldo user + lihat order PPOB ---------- */
+async function renderAS(){
+  $("pgTitle").textContent = "Saldo & Order PPOB";
+  $("pgBody").innerHTML = `<div class="pgcard"><h4 class="ph">${IC.wallet}Tambah saldo user</h4>
+    <p class="mut" style="margin:0 0 10px">User harus pernah login Google di web ini. Cocokkan nominal dengan bukti bayar dulu.</p>
+    <label class="lb" for="asMail">Email user</label><input class="in" id="asMail" type="email" inputmode="email" autocomplete="off" placeholder="nama@gmail.com">
+    <label class="lb" for="asAmt" style="margin-top:10px;display:block">Nominal (Rp)</label><input class="in" id="asAmt" inputmode="numeric" autocomplete="off" placeholder="Rp 0">
+    <label class="lb" for="asNote" style="margin-top:10px;display:block">Catatan (opsional)</label><input class="in" id="asNote" autocomplete="off" maxlength="100" placeholder="mis. transfer DANA 27 Nov">
+    <div class="err" id="asErr" role="alert"></div>
+    <button type="button" class="cta" data-act="asadd">Tambah saldo</button>
+    <button type="button" class="ghost" data-act="assub" style="margin-top:8px">Kurangi saldo (koreksi)</button></div>
+    <div class="pgcard"><h4 class="ph">${IC.hist}Order PPOB terbaru</h4><div id="asList"><p class="empty">Memuat…</p></div></div>`;
+  const s = await ppSession(), box = $("asList"); if(!box) return;
+  if(!s){ box.innerHTML = `<p class="empty">Login Google sebagai admin untuk memuat data.</p>`; return; }
+  const r = await s.sb.from("ppob_orders").select("id,product_name,price,cost,target,status,created_at,profiles(email)").order("created_at", {ascending: false}).limit(25);
+  if(r.error){ box.innerHTML = `<p class="empty">Gagal memuat. Pastikan SQL PPOB sudah dijalankan dan kamu login Google admin.</p>`; return; }
+  const lab = {pending: "Diproses", processing: "Diproses", success: "Berhasil", failed: "Gagal"};
+  box.innerHTML = (r.data || []).length ? r.data.map(o => `<div class="hist"><b>${esc(o.product_name)} · ${rp(o.price)}</b><small>${esc(o.profiles && o.profiles.email || "-")} · ${esc(o.target)} · ${esc(fmtDate(o.created_at))} · <b>${lab[o.status] || esc(o.status)}</b>${o.status === "success" ? " · untung " + rp(o.price - o.cost) : ""}</small></div>`).join("") : `<p class="empty">Belum ada order PPOB.</p>`;
+}
+async function asApply(sign){
+  const er = $("asErr"), mail = $("asMail").value.trim().toLowerCase(), amt = +String($("asAmt").value).replace(/\D/g, "") || 0, note = $("asNote").value.trim().slice(0, 100);
+  if(!/^\S+@\S+\.\S+$/.test(mail)){ er.textContent = "Email user tidak valid."; return; }
+  if(amt < 1 || amt > 100000000){ er.textContent = "Nominal tidak valid."; return; }
+  er.textContent = "";
+  const s = await ppSession(); if(!s){ er.textContent = "Login Google sebagai admin dulu (keluar lalu masuk lagi)."; return; }
+  if(!confirm((sign > 0 ? "Tambah " : "Kurangi ") + rp(amt) + " untuk " + mail + "?")) return;
+  const r = await s.sb.rpc("admin_add_saldo", {p_email: mail, p_amount: sign * amt, p_note: note || null});
+  if(r.error){
+    const m = r.error.message || "";
+    er.textContent = /NOT_ADMIN/.test(m) ? "Bukan akun admin. Login Google pakai email admin." : /USER_NOT_FOUND/.test(m) ? "Email itu belum pernah login Google di web ini." : /check|saldo/i.test(m) ? "Saldo user tidak cukup untuk dikurangi." : "Gagal. Coba lagi.";
+    return;
+  }
+  flash("Berhasil. Saldo " + mail + " sekarang " + rp(r.data));
+  $("asAmt").value = ""; $("asNote").value = "";
+  renderAS();
+}
+
 const PPD = {list:[], loaded:false, loading:false, err:"", demo:false};
 function ppCatOf(r){
   const s = String(r.category || r.type || r.kategori || "").toLowerCase();
@@ -1430,7 +1560,7 @@ function normPP(r){
   if(!id || !name || !(base > 0)) return null;
   if(r.seller_product_status === false || r.buyer_product_status === false || r.active === false || /gangguan|kosong|nonaktif|inactive/i.test(String(r.status || ""))) return null;
   const price = Math.ceil(base * (1 + (+PP_API.markupPct || 0) / 100) + (+PP_API.markupFlat || 0));
-  return {id, name, brand: String(r.brand || r.provider || name.split(" ")[0] || "Lainnya").toUpperCase(), cat: ppCatOf(r), price};
+  return {id, name, brand: String(r.brand || r.provider || name.split(" ")[0] || "Lainnya").toUpperCase(), cat: ppCatOf(r), price, z: !!r.zone};
 }
 async function ppLoad(){
   if(PPD.loading) return;
@@ -1438,13 +1568,13 @@ async function ppLoad(){
   try{
     if(PP_API.url){
       const r = await fetch(PP_API.url, {headers: PP_API.headers || {}});
-      if(!r.ok) throw new Error("HTTP " + r.status);
+      if(!r.ok){ let m = ""; try{ const jj = await r.json(); m = jj && jj.error ? jj.error : ""; }catch(_){} throw new Error("HTTP " + r.status + (m ? " - " + m : "")); }
       const j = await r.json();
       const arr = Array.isArray(j) ? j : (j.data || j.products || []);
       PPD.list = arr.map(normPP).filter(Boolean); PPD.demo = false;
     } else { PPD.list = PP_DEMO.map(normPP).filter(Boolean); PPD.demo = true; }
     PPD.loaded = true;
-  }catch(e){ PPD.err = "Produk gagal dimuat. Coba lagi."; }
+  }catch(e){ PPD.err = "Produk gagal dimuat. Coba lagi." + (isAdmin() ? " [Info admin: " + (e && e.message ? e.message : e) + "]" : ""); }
   PPD.loading = false;
   if(!$("pageView").hidden && PG.name === "ppob") renderPage();
 }
@@ -1566,6 +1696,8 @@ function renderPage(){
     renderAdminPage(body);
   } else if(n === "adminguide"){
     renderGA();
+  } else if(n === "adminsaldo"){
+    renderAS();
   } else if(n === "adminmarkup"){
     renderMK();
   } else if(n === "adminbanner"){
@@ -1583,10 +1715,11 @@ function renderPage(){
   } else if(n === "ppob"){
     $("pgTitle").textContent = "PPOB";
     if(!PG.cat) PG.cat = PP_CATS[0].id;
-    const head = `<h2 class="pgh">PPOB</h2><p class="mut">Top up, game, pulsa &amp; paket data. Pesanan diproses admin lewat WhatsApp.</p>${seg("Beli", "Riwayat")}`;
+    if(!PPX.loading && Date.now() - PPX.t > 20000) ppLoadMine();
+    const head = `<h2 class="pgh">PPOB</h2><p class="mut">Top up, game, pulsa &amp; paket data. Diproses otomatis dari saldo PPOB kamu.</p>
+      <div class="pgcard row2"><div><small>Saldo PPOB</small><div class="big" id="ppSaldo">${ppSaldoText()}</div></div><button type="button" class="ghost" data-act="ppdep" style="width:auto;margin:0;padding:8px 14px">Isi saldo</button></div>${seg("Beli", "Riwayat")}`;
     if(PG.tab === "b"){
-      const l = lsGet("alstore_ppob", []);
-      body.innerHTML = head + `<div class="pgcard"><h4 class="ph">${IC.hist}Riwayat permintaan</h4>${l.length ? l.map(x => `<div class="hist"><b>${esc(x.name || x.cat)}${x.price ? " · " + rp(x.price) : ""}</b><small>${esc(x.no)} · ${esc(fmtDate(x.ts))}</small></div>`).join("") : `<p class="empty">Belum ada permintaan PPOB.</p>`}</div>`;
+      body.innerHTML = head + `<div class="pgcard"><h4 class="ph">${IC.hist}Riwayat PPOB</h4><div id="ppHist">${ppHistHTML()}</div></div>`;
     } else {
       const cat = PP_CATS.find(c => c.id === PG.cat) || PP_CATS[0];
       const brands = [...new Set(PPD.list.filter(x => x.cat === cat.id).map(x => x.brand))].sort();
@@ -1597,9 +1730,9 @@ function renderPage(){
         + (brands.length > 1 ? `<div class="pills"><button type="button" class="pill" data-act="ppbrand" data-b="" aria-pressed="${!PG.brand}">Semua</button>${brands.map(b => `<button type="button" class="pill" data-act="ppbrand" data-b="${esc(b)}" aria-pressed="${PG.brand === b}">${esc(b)}</button>`).join("")}</div>` : "")
         + (sel ? `<div class="pgcard" id="ppForm"><h4 class="ph">${IC.bolt}${esc(sel.name)}</h4><p class="mut" style="margin:0 0 10px">${esc(sel.brand)} · <b>${rp(sel.price)}</b></p>
             <label class="lb" for="ppNo">${esc(cat.ph)}</label><input class="in" id="ppNo" inputmode="numeric" autocomplete="off" placeholder="${esc(cat.ph)}" value="${esc(PG.ppno || "")}">
-            ${cat.zone ? `<label class="lb" for="ppZone" style="margin-top:10px">Zone / Server ID (jika ada)</label><input class="in" id="ppZone" inputmode="numeric" autocomplete="off" placeholder="mis. 2001" value="${esc(PG.ppzone || "")}">` : ""}
+            ${cat.zone || sel.z ? `<label class="lb" for="ppZone" style="margin-top:10px;display:block">Zone / Server ID${sel.z ? "" : " (jika ada)"}</label><input class="in" id="ppZone" inputmode="numeric" autocomplete="off" placeholder="mis. 2001" value="${esc(PG.ppzone || "")}">` : ""}
             <div class="err" id="ppErr" role="alert"></div>
-            <button type="button" class="cta" data-act="ppob">${IC.bolt}Pesan via WhatsApp</button></div>` : "")
+            <button type="button" class="cta" data-act="ppob">${IC.bolt}Beli sekarang</button></div>` : "")
         + `<input class="in" id="ppQ" type="search" placeholder="Cari produk…" autocomplete="off" value="${esc(PG.q || "")}" style="margin-bottom:10px">`
         + `<div id="ppList">${ppListHTML()}</div>`;
       if(!PPD.loaded && !PPD.loading && !PPD.err) ppLoad();
@@ -2023,9 +2156,9 @@ async function cloudSignIn(idToken){
   if(!cloudOn() || !idToken) return; const sb = await cloudClient(); if(!sb) return;
   const {error} = await sb.auth.signInWithIdToken({provider: "google", token: idToken});
   if(error) console.warn("Supabase login:", error.message);
-  else cloudPull(true);
+  else { cloudPull(true); try{ PPX.t = 0; PPX.loaded = false; }catch(_){} }
 }
-async function cloudSignOut(){ if(!CLOUD.sb) return; try{ await CLOUD.sb.auth.signOut(); }catch(_){} }
+async function cloudSignOut(){ try{ ppReset(); }catch(_){} if(!CLOUD.sb) return; try{ await CLOUD.sb.auth.signOut(); }catch(_){} }
 if(cloudOn()){
   cloudPull(true).then(cloudSubscribe);
   document.addEventListener("visibilitychange", () => { if(!document.hidden) cloudPull(false); });   /* balik ke aplikasi -> ambil data terbaru */
@@ -2274,17 +2407,10 @@ $("pgBody").addEventListener("click", e => {
   else if(a === "ppbrand"){ PG.brand = b.dataset.b; renderPage(); }
   else if(a === "ppsel"){ PG.sel = b.dataset.id; renderPage(); const f = $("ppForm"); if(f) f.scrollIntoView({block:"center"}); }
   else if(a === "ppretry"){ PPD.err = ""; renderPage(); }
-  else if(a === "ppob"){
-    const x = PPD.list.find(v => v.id === PG.sel), er = $("ppErr");
-    if(!x) return;
-    const cat = PP_CATS.find(c => c.id === x.cat) || PP_CATS[0];
-    const no = $("ppNo").value.replace(/\D/g, ""), zone = $("ppZone") ? $("ppZone").value.replace(/\D/g, "").slice(0, 8) : "";
-    if(no.length < 5 || no.length > 20){ er.textContent = "Nomor / ID tujuan tidak valid."; return; }
-    er.textContent = "";
-    const l = lsGet("alstore_ppob", []); l.unshift({cat:cat.name, name:x.name, no:no + (zone ? " (" + zone + ")" : ""), price:x.price, ts:Date.now()}); lsSet("alstore_ppob", l.slice(0, 50));
-    window.open(waLink("Halo admin, saya mau order PPOB.\nKategori: " + cat.name + "\nProduk: " + x.name + "\nKode: " + x.id + "\nTujuan: " + no + (zone ? "\nZone/Server: " + zone : "") + "\nHarga: " + rp(x.price)), "_blank", "noopener");
-    renderPage();
-  }
+  else if(a === "ppob"){ ppBuy(); }
+  else if(a === "ppdep"){ window.open(waLink("Halo admin, saya mau isi saldo PPOB.\nEmail: " + (USER ? USER.email : "") + "\nNominal: Rp"), "_blank", "noopener"); }
+  else if(a === "asadd"){ asApply(1); }
+  else if(a === "assub"){ asApply(-1); }
   else if(a === "like"){
     const u = $("uidIn").value.replace(/\D/g, ""), er = $("uidErr");
     if(u.length < 6 || u.length > 14){ er.textContent = "UID Free Fire tidak valid."; return; }
