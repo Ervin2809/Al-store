@@ -1115,6 +1115,7 @@ function renderAdminPage(body){
     <button type="button" class="cta" data-gonav="adminguide" style="margin-top:10px">Kelola Link Panduan</button>
     <button type="button" class="cta" data-gonav="adminticker" style="margin-top:10px">Edit Teks Berjalan</button>
     <button type="button" class="cta" data-gonav="adminplat" style="margin-top:10px">Label Platform Produk</button>
+    <button type="button" class="cta" data-gonav="adminppc" style="margin-top:10px">Produk PPOB (Tambah Manual)</button>
     <button type="button" class="cta" data-gonav="adminsaldo" style="margin-top:10px">Saldo &amp; Order PPOB</button>
     <div class="pgcard" style="margin-top:14px"><h4 class="ph">Pesanan terbaru</h4>${orders.length ? orders.slice(0, 20).map(o => `<div class="hist"><b>${esc(o.name)}</b> · ${esc(o.pkg)} x${+o.qty}<br><small>${esc(o.id)} · ${rp(o.total)} · ${esc(o.status)}</small></div>`).join("") : `<p class="mut">Belum ada pesanan.</p>`}</div>
     <div class="pgcard"><h4 class="ph">Deposit terbaru</h4>${deps.length ? deps.slice(0, 20).map(d => `<div class="hist"><b>${rp(d.amount)}</b><br><small>${esc(fmtDate(d.ts))}</small></div>`).join("") : `<p class="mut">Belum ada deposit.</p>`}</div>
@@ -1182,7 +1183,7 @@ const PRODUCT_PATHS = false;   // true: /produk/nama-produk (butuh route Worker)
 let ROUTING = false;
 function brandName(){ return [CONFIG.brandA, CONFIG.brandB].filter(Boolean).join(""); }
 /* link per halaman: ?produk=slug | ?halaman=deposit|riwayat|lacak|leaderboard|cek-id|status-like|cara-beli|faq|syarat|privasi */
-const PAGE_SLUGS = {"admin-leaderboard":["adminlb","a",1], "admin-markup":["adminmarkup","a",1], "admin-teks-berjalan":["adminticker","a",1], "admin-platform":["adminplat","a",1], "admin-banner":["adminbanner","a",1], "admin-saldo":["adminsaldo","a",1], admin:["admin","a",1], "admin-panduan":["adminguide","a",1], panduan:["guide","a",1], "riwayat-key":["keys","a",1], pesanan:["order","a",0], deposit:["deposit","a",1], riwayat:["orders","a",1], lacak:["orders","b",1], leaderboard:["lb","a",0], "cek-id":["like","a",1], "status-like":["like","b",1], ppob:["ppob","a",1], "riwayat-ppob":["ppob","b",1]};
+const PAGE_SLUGS = {"admin-leaderboard":["adminlb","a",1], "admin-markup":["adminmarkup","a",1], "admin-teks-berjalan":["adminticker","a",1], "admin-platform":["adminplat","a",1], "admin-banner":["adminbanner","a",1], "admin-saldo":["adminsaldo","a",1], "admin-produk-ppob":["adminppc","a",1], admin:["admin","a",1], "admin-panduan":["adminguide","a",1], panduan:["guide","a",1], "riwayat-key":["keys","a",1], pesanan:["order","a",0], deposit:["deposit","a",1], riwayat:["orders","a",1], lacak:["orders","b",1], leaderboard:["lb","a",0], "cek-id":["like","a",1], "status-like":["like","b",1], ppob:["ppob","a",1], "riwayat-ppob":["ppob","b",1]};
 const INFO_SLUGS = {"cara-beli":"how", faq:"faq", syarat:"terms", privasi:"privacy"};
 const slugOfPage = (n, t) => Object.keys(PAGE_SLUGS).find(k => PAGE_SLUGS[k][0] === n && PAGE_SLUGS[k][1] === (t || "a")) || "";
 const slugOfInfo = k => Object.keys(INFO_SLUGS).find(x => INFO_SLUGS[x] === k) || "";
@@ -1545,7 +1546,7 @@ async function asApply(sign){
   renderAS();
 }
 
-const PPD = {list:[], loaded:false, loading:false, err:"", demo:false};
+const PPD = {list:[], loaded:false, loading:false, err:"", demo:false, fresh:false};
 function ppCatOf(r){
   const s = String(r.category || r.type || r.kategori || "").toLowerCase();
   if(/data|internet|paket/.test(s)) return "data";
@@ -1567,7 +1568,7 @@ async function ppLoad(){
   PPD.loading = true; PPD.err = "";
   try{
     if(PP_API.url){
-      const r = await fetch(PP_API.url, {headers: PP_API.headers || {}});
+      const r = await fetch(PP_API.url, {headers: PP_API.headers || {}, cache: PPD.fresh ? "reload" : "default"}); PPD.fresh = false;
       if(!r.ok){ let m = ""; try{ const jj = await r.json(); m = jj && jj.error ? jj.error : ""; }catch(_){} throw new Error("HTTP " + r.status + (m ? " - " + m : "")); }
       const j = await r.json();
       const arr = Array.isArray(j) ? j : (j.data || j.products || []);
@@ -1652,7 +1653,7 @@ const pgExtra = () => (PG.name === "guide" && PG.oid) ? {item: (DB.products.find
 function showPage(name, tab, extra){
   { const lk = guestLock(); if(lk && name !== "guide"){ name = "order"; tab = "a"; extra = lk; } }
   if(/^admin/.test(name) && !isAdmin()){ flash("Akses khusus admin."); return; }
-  closeAll(); clearInterval(cdTimer); PG.proc = null; if(name === "adminguide") GA = null; if(name === "adminmarkup") MK = null; if(name === "adminbanner") BN = null; if(name === "adminlb") LBE = null; if(name === "adminticker") TKE = null; if(name === "adminplat") PLE = null;
+  closeAll(); clearInterval(cdTimer); PG.proc = null; if(name === "adminguide") GA = null; if(name === "adminmarkup") MK = null; if(name === "adminbanner") BN = null; if(name === "adminlb") LBE = null; if(name === "adminticker") TKE = null; if(name === "adminplat") PLE = null; if(name === "adminppc") PPCE = null;
   PG = {name, tab: tab || "a", filter:"all", dep: PG.dep || 0, oid: extra || ""};
   $("homeView").hidden = true; $("productView").hidden = true; $("pageView").hidden = false;
   renderPage(); restoreScroll(); pushUrl(null, slugOfPage(name, PG.tab), pgExtra());
@@ -1706,6 +1707,8 @@ function renderPage(){
     renderTKE();
   } else if(n === "adminplat"){
     renderPLE();
+  } else if(n === "adminppc"){
+    renderPPC();
   } else if(n === "adminlb"){
     renderLBE();
   } else if(n === "guide"){
@@ -2078,6 +2081,98 @@ $("pgBody").addEventListener("click", e => {
   if(!PLE || !e.target.closest) return;
   if(e.target.closest("[data-pl-save]")){ lsSet(PL_KEY, PLE); applyPlatOverride(); refreshAll(); pleLoad(); renderPLE(); flash("Label platform disimpan."); }
   else if(e.target.closest("[data-pl-reset]")){ cfgRemove(PL_KEY); applyPlatOverride(); refreshAll(); pleLoad(); renderPLE(); flash("Label dihapus."); }
+});
+
+/* ---------- Admin: produk PPOB manual (disimpan di server, tabel ppob_custom) ---------- */
+let PPCE = null;
+const PPC_CATS = [["Games", "Game"], ["E-Wallet", "E-Wallet"], ["Pulsa", "Pulsa"], ["Data", "Paket Data"]];
+const PPC_EMPTY = () => ({old: "", sku: "", name: "", brand: "", category: "Games", price: "", cost: "", zone: false, active: true});
+function ppcLoad(){ PPCE = {form: PPC_EMPTY(), q: "", list: null, busy: false, err: ""}; ppcFetch(); }
+async function ppcFetch(){
+  const st = PPCE;
+  try{ const j = await ppCall({action: "custom_list"}); if(PPCE === st){ st.list = j.data || []; st.err = ""; } }
+  catch(e){ if(PPCE === st){ st.list = st.list || []; st.err = ppErr(e) + " (Pastikan SQL ppob_custom sudah dijalankan & function sudah di-deploy ulang)"; } }
+  if(PPCE === st && PG.name === "adminppc") renderPPC();
+}
+function ppcAfterChange(){ PPD.fresh = true; PPD.loaded = false; PPD.list = []; PPD.err = ""; }
+function renderPPC(){
+  $("pgTitle").textContent = "Produk PPOB";
+  if(!PPCE) ppcLoad();
+  const y = window.scrollY, f = PPCE.form, all = PPCE.list || [], q = PPCE.q.trim().toLowerCase();
+  const catName = id => (PPC_CATS.find(c => c[0] === id) || [0, id])[1];
+  const list = all.filter(p => !q || String(p.name).toLowerCase().includes(q) || String(p.brand).toLowerCase().includes(q) || String(p.sku).toLowerCase().includes(q));
+  $("pgBody").innerHTML = `<p class="mut" style="margin:0 0 10px">Tambah produk PPOB sendiri. Disimpan di server, jadi harga &amp; produk dipakai juga saat order. ${PPCE.list ? all.length + " produk manual." : "Memuat…"}</p>
+    ${PPCE.err ? `<div class="pgcard"><p class="mut" style="margin:0">${esc(PPCE.err)}</p></div>` : ""}
+    <div class="pgcard"><h4 class="ph">${f.old ? "Edit produk" : "Tambah produk"}</h4>
+      <label class="lb" for="ppcName">Nama produk</label><input class="in" id="ppcName" data-ppc="name" placeholder="mis. Mobile Legends 86 Diamond" autocomplete="off" value="${esc(f.name)}">
+      <label class="lb" for="ppcBrand" style="display:block;margin-top:10px">Brand / grup</label><input class="in" id="ppcBrand" data-ppc="brand" placeholder="mis. Mobile Legends" autocomplete="off" value="${esc(f.brand)}">
+      <label class="lb" for="ppcCat" style="display:block;margin-top:10px">Kategori</label>
+      <select class="in" id="ppcCat" data-ppc="category">${PPC_CATS.map(c => `<option value="${esc(c[0])}"${f.category === c[0] ? " selected" : ""}>${esc(c[1])}</option>`).join("")}</select>
+      <label class="lb" for="ppcId" style="display:block;margin-top:10px">Kode SKU (sama persis dengan di Melo)</label><input class="in" id="ppcId" data-ppc="sku" placeholder="mis. ML86" autocomplete="off" autocapitalize="off"${f.old ? " readonly" : ""} value="${esc(f.sku)}">
+      <label class="lb" for="ppcPrice" style="display:block;margin-top:10px">Harga jual ke pembeli (Rp)</label><input class="in" id="ppcPrice" data-ppc="price" type="number" min="1" inputmode="numeric" placeholder="mis. 22000" value="${esc(f.price)}">
+      <label class="lb" for="ppcCost" style="display:block;margin-top:10px">Harga modal / max harga dari Melo (Rp)</label><input class="in" id="ppcCost" data-ppc="cost" type="number" min="0" inputmode="numeric" placeholder="wajib kalau SKU tidak ada di daftar Melo" value="${esc(f.cost)}">
+      <p class="mut" style="margin:6px 0 0;font-size:12px">Kalau SKU sudah ada di produk Melo, modal otomatis dari Melo (kolom ini boleh kosong) dan harga jual di sini menimpa harga otomatis. Kalau SKU tidak ada di daftar sinkron, modal wajib diisi; Melo menolak order bila harga aslinya lebih mahal dari modal ini.</p>
+      <label class="lb" style="display:flex;align-items:center;gap:10px;margin:12px 0 0"><input type="checkbox" data-ppc="zone"${f.zone ? " checked" : ""} style="width:18px;height:18px"> Wajib isi Zone / Server ID</label>
+      <label class="lb" style="display:flex;align-items:center;gap:10px;margin:10px 0 0"><input type="checkbox" data-ppc="active"${f.active ? " checked" : ""} style="width:18px;height:18px"> Tampilkan di toko <small class="mut">(dimatikan = produk dengan SKU ini disembunyikan, termasuk produk dari Melo)</small></label>
+      <div class="err" id="ppcErr" role="alert"></div>
+      <button type="button" class="cta" data-ppc-save${PPCE.busy ? " disabled" : ""}>${f.old ? "Simpan perubahan" : "Tambah produk"}</button>
+      ${f.old ? `<button type="button" class="sm" data-ppc-cancel style="margin:10px auto 0">Batal edit</button>` : ""}</div>
+    ${all.length ? `<input class="in" id="ppcSearch" type="search" placeholder="Cari produk manual..." value="${esc(PPCE.q)}" style="margin-bottom:10px">` : ""}
+    ${list.map(p => `<div class="pgcard"><b>${esc(p.name)}</b>${p.active === false ? ` <small class="mut">(disembunyikan)</small>` : ""}<br>
+      <small class="mut">${esc(catName(p.category))} · ${esc(p.brand || "-")} · SKU: ${esc(p.sku)}${p.zone_required ? " · pakai Zone" : ""}</small>
+      <div style="font-weight:800;margin:6px 0">${rp(+p.price || 0)} <small class="mut" style="font-weight:400">modal ${+p.cost > 0 ? rp(+p.cost) : "dari Melo"}</small></div>
+      <button type="button" class="sm" data-ppc-edit="${esc(p.sku)}">Edit</button> <button type="button" class="sm" data-ppc-tog="${esc(p.sku)}">${p.active === false ? "Tampilkan" : "Sembunyikan"}</button> <button type="button" class="sm" data-ppc-del="${esc(p.sku)}">Hapus</button></div>`).join("") || (PPCE.list ? (all.length ? `<p class="mut">Produk tidak ditemukan.</p>` : `<p class="mut">Belum ada produk manual.</p>`) : "")}`;
+  window.scrollTo(0, y);
+}
+function ppcPayload(p, over){ return Object.assign({sku: p.sku, name: p.name, brand: p.brand || "", category: p.category, price: +p.price, cost: +p.cost || 0, zone_required: !!p.zone_required, active: p.active !== false}, over || {}); }
+async function ppcSend(item, okMsg, er){
+  if(PPCE.busy) return; PPCE.busy = true;
+  try{
+    await ppCall({action: "custom_save", item});
+    PPCE.form = PPC_EMPTY(); ppcAfterChange(); PPCE.busy = false;
+    const j = await ppCall({action: "custom_list"}); PPCE.list = j.data || []; PPCE.err = "";
+    renderPPC(); flash(okMsg);
+  }catch(e){ PPCE.busy = false; if(er) er.textContent = ppErr(e); else flash(ppErr(e)); const b = document.querySelector("[data-ppc-save]"); if(b) b.disabled = false; }
+}
+$("pgBody").addEventListener("input", e => {
+  if(!PPCE || !e.target.dataset) return;
+  if(e.target.id === "ppcSearch"){ PPCE.q = e.target.value; renderPPC(); const s = $("ppcSearch"); if(s){ s.focus(); s.setSelectionRange(s.value.length, s.value.length); } return; }
+  const k = e.target.dataset.ppc; if(!k || e.target.type === "checkbox") return;
+  PPCE.form[k] = e.target.value;
+});
+$("pgBody").addEventListener("change", e => {
+  if(!PPCE || !e.target.dataset || !e.target.dataset.ppc) return;
+  PPCE.form[e.target.dataset.ppc] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+});
+$("pgBody").addEventListener("click", e => {
+  if(!PPCE || !e.target.closest) return;
+  const t = e.target; let b;
+  if(t.closest("[data-ppc-save]")){
+    const f = PPCE.form, er = $("ppcErr");
+    const item = {sku: String(f.sku).trim().replace(/\s+/g, ""), name: String(f.name).trim(), brand: String(f.brand).trim(), category: f.category, price: Math.round(+f.price), cost: Math.round(+f.cost) || 0, zone_required: !!f.zone, active: f.active !== false};
+    if(!item.name){ er.textContent = "Nama produk wajib diisi."; return; }
+    if(!item.sku){ er.textContent = "Kode SKU wajib diisi."; return; }
+    if(!(item.price > 0)){ er.textContent = "Harga jual harus lebih dari 0."; return; }
+    if(item.cost > 0 && item.price < item.cost){ er.textContent = "Harga jual lebih kecil dari modal (rugi)."; return; }
+    ppcSend(item, f.old ? "Produk diperbarui." : "Produk ditambahkan.", er);
+  }
+  else if(t.closest("[data-ppc-cancel]")){ PPCE.form = PPC_EMPTY(); renderPPC(); }
+  else if((b = t.closest("[data-ppc-edit]"))){
+    const p = (PPCE.list || []).find(x => x.sku === b.dataset.ppcEdit); if(!p) return;
+    PPCE.form = {old: p.sku, sku: p.sku, name: p.name, brand: p.brand || "", category: p.category, price: p.price, cost: +p.cost > 0 ? p.cost : "", zone: !!p.zone_required, active: p.active !== false};
+    renderPPC(); window.scrollTo(0, 0);
+  }
+  else if((b = t.closest("[data-ppc-tog]"))){
+    const p = (PPCE.list || []).find(x => x.sku === b.dataset.ppcTog); if(!p) return;
+    ppcSend(ppcPayload(p, {active: p.active === false}), p.active === false ? "Produk ditampilkan." : "Produk disembunyikan.");
+  }
+  else if((b = t.closest("[data-ppc-del]"))){
+    const p = (PPCE.list || []).find(x => x.sku === b.dataset.ppcDel); if(!p) return;
+    if(!confirm("Hapus produk \"" + p.name + "\"?")) return;
+    ppCall({action: "custom_delete", sku: p.sku}).then(async () => {
+      ppcAfterChange(); PPCE.form = PPC_EMPTY(); const j = await ppCall({action: "custom_list"}); PPCE.list = j.data || []; renderPPC(); flash("Produk dihapus.");
+    }).catch(err => flash(ppErr(err)));
+  }
 });
 
 captureBase(); applyMarkup(); applyBannerOverride(); applyTickerOverride(); applyPlatOverride();
