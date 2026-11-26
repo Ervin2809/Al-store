@@ -1129,8 +1129,11 @@ async function installApp(){
 }
 /* kembali dari halaman yang dibuka lewat menu titik 3 -> menu titik 3 terbuka lagi */
 let DRAWER_RET = false, REOPEN = false;
-function maybeReopenDrawer(){
-  if(!REOPEN) return; REOPEN = false;
+function maybeReopenDrawer(force){
+  if(!REOPEN) return;
+  /* showHome dibungkus runLoad (tertunda ~750ms): kalau beranda belum tampil, tunggu — runLoad memanggil ulang setelah selesai */
+  if($("homeView").hidden && !force) return;
+  REOPEN = false;
   if(DRAWER_RET && USER && !$("homeView").hidden && $("drawer").hidden && $("modal").hidden){ DRAWER_RET = false; openDrawer(); }
 }
 const DM_PAGES = ["admin","adminguide","topup","hist","track","vault","guide","lb","like"];
@@ -1307,6 +1310,7 @@ function runLoad(fn, ctx, args){
   setTimeout(() => {
     const prev = ROUTING; ROUTING = routing;
     try{ fn.apply(ctx, args || []); }catch(_){ } finally { ROUTING = prev; }
+    if(REOPEN) maybeReopenDrawer(true);   /* beranda sudah tampil -> buka lagi menu titik 3 */
     ov.classList.add("out"); setTimeout(() => { ov.remove(); pgLoading = false; }, 200);
   }, 750);
 }
