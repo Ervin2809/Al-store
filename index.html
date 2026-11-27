@@ -1437,7 +1437,7 @@ function ppErr(e){ return e && (e.status === 401 || e.message === "LOGIN") ? "Or
 async function agpCall(body){
   const s = await ppSession();
   const tok = s ? s.session.access_token : CONFIG.supabaseKey;
-  const r = await fetch("https://autogopay.vinzprostore.workers.dev/", {method: "POST", headers: {"Content-Type": "application/json", apikey: CONFIG.supabaseKey, Authorization: "Bearer " + tok}, body: JSON.stringify(body)});
+  const r = await fetch("https://vinzprostore.web.id/", {method: "POST", headers: {"Content-Type": "application/json", apikey: CONFIG.supabaseKey, Authorization: "Bearer " + tok}, body: JSON.stringify(body)});
   let j = {}; try{ j = await r.json(); }catch(_){}
   if(!r.ok){ const e = new Error(j.error || "Gagal memproses. Coba lagi."); e.status = r.status; throw e; }
   return j;
