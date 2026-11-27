@@ -1285,7 +1285,8 @@ function renderPkgs(){
 function setTab(t){
   S.tab = "buy"; $("tBuy").hidden = false;
 }
-const getSaldo = () => Math.max(0, Number(lsGet("alstore_saldo", 0)) || 0);
+const PPX = {saldo: null, orders: [], loaded: false, loading: false, busy: false, t: 0, timer: null, chs: null, deb: 0};
+const getSaldo = () => Math.max(0, Number(PPX.saldo) || 0);   /* saldo asli dari server (profiles.saldo) */
 function refreshPay(total){
   const b = document.querySelector('.pay[data-m="Saldo"]'); if(!b) return;
   if(!USER){
@@ -1419,7 +1420,6 @@ const PP_DEMO = [
 ];
 
 /* ---------- PPOB server: saldo, order otomatis, riwayat ---------- */
-const PPX = {saldo: null, orders: [], loaded: false, loading: false, busy: false, t: 0, timer: null, chs: null, deb: 0};
 async function ppSession(){
   const sb = await cloudClient(); if(!sb) return null;
   const r = await sb.auth.getSession();
@@ -1433,6 +1433,28 @@ async function ppCall(body){
   return j;
 }
 function ppErr(e){ return e && (e.status === 401 || e.message === "LOGIN") ? "Order PPOB butuh login Google. Keluar lalu masuk lagi pakai Google." : (e && e.message) || "Gagal memproses. Coba lagi."; }
+/* ---------- AutoGoPay (QRIS asli) lewat Edge Function "autogopay" ---------- */
+async function agpCall(body){
+  const s = await ppSession();
+  const tok = s ? s.session.access_token : CONFIG.supabaseKey;
+  const r = await fetch(CONFIG.supabaseUrl + "/functions/v1/autogopay", {method: "POST", headers: {"Content-Type": "application/json", apikey: CONFIG.supabaseKey, Authorization: "Bearer " + tok}, body: JSON.stringify(body)});
+  let j = {}; try{ j = await r.json(); }catch(_){}
+  if(!r.ok){ const e = new Error(j.error || "Gagal memproses. Coba lagi."); e.status = r.status; throw e; }
+  return j;
+}
+let QRLIB = null;
+function qrLib(){
+  if(window.qrcode) return Promise.resolve();
+  if(QRLIB) return QRLIB;
+  QRLIB = new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"; sc.onload = ok; sc.onerror = () => { QRLIB = null; no(); }; document.head.appendChild(sc); });
+  return QRLIB;
+}
+function qrSvg(str){
+  try{ const q = window.qrcode(0, "M"); q.addData(String(str)); q.make(); return q.createSvgTag({cellSize: 6, margin: 3, scalable: true}); }catch(_){ return ""; }
+}
+function qrFill(id, str){
+  qrLib().then(() => { const el = $(id); if(el) el.innerHTML = qrSvg(str) || '<p class="mut">QR gagal dibuat. Pakai tombol "Buka halaman bayar".</p>'; }).catch(() => { const el = $(id); if(el) el.innerHTML = '<p class="mut">QR gagal dimuat. Pakai tombol "Buka halaman bayar".</p>'; });
+}
 function ppSaldoText(){ return PPX.saldo != null ? rp(PPX.saldo) : (PPX.loaded ? "—" : "Memuat…"); }
 function ppHistHTML(){
   if(!PPX.loaded) return `<p class="empty">Memuat…</p>`;
@@ -1445,6 +1467,8 @@ function ppHistHTML(){
 }
 function ppRerender(){
   const s = $("ppSaldo"); if(s) s.textContent = ppSaldoText();
+  const d = $("depSaldo"); if(d) d.textContent = rp(getSaldo());
+  try{ if(!$("productView").hidden) updTotal(); }catch(_){}
   const h = $("ppHist"); if(h) h.innerHTML = ppHistHTML();
 }
 function ppReset(){
@@ -1647,6 +1671,65 @@ function saveOrder(p, pk, qty, total, method){
   return id;
 }
 
+const DEP = {cur: null, list: null, timer: 0, busy: false};
+const DEP_LAB = {pending: "Menunggu pembayaran", paid: "Berhasil", expired: "Kedaluwarsa", cancel: "Dibatalkan"};
+function depHistHTML(){
+  if(!USER) return `<p class="empty" style="text-align:center">Masuk dengan Google untuk isi saldo.</p>`;
+  if(!DEP.list) return `<p class="empty" style="text-align:center">Memuat…</p>`;
+  if(!DEP.list.length) return `<p class="empty" style="text-align:center">Belum ada deposit.</p>`;
+  return DEP.list.map(d => `<div class="hist"><b>${rp(d.amount)}</b><small>${esc(fmtDate(d.created_at))} · ${esc(DEP_LAB[d.status] || d.status)}</small></div>`).join("");
+}
+async function depLoad(){
+  const s = await ppSession(); if(!s){ DEP.list = []; const h0 = $("depHist"); if(h0) h0.innerHTML = depHistHTML(); return; }
+  try{ const r = await s.sb.from("deposits").select("id,amount,status,created_at").order("created_at", {ascending: false}).limit(20); DEP.list = r.data || []; }catch(_){ DEP.list = DEP.list || []; }
+  const h = $("depHist"); if(h) h.innerHTML = depHistHTML();
+}
+function depQrCard(){
+  const c = DEP.cur;
+  return `<div class="pgcard" style="text-align:center"><small>Scan QRIS untuk isi saldo</small>
+    <div class="qrbox" id="depQr" style="min-height:220px"><p class="mut">Memuat QR…</p></div>
+    <div class="big" style="margin-top:10px">${rp(c.amount)}</div>
+    <p class="mut" style="margin-top:4px">Bayar sebelum <b id="depCd">--:--</b></p>
+    <p class="mut" id="depSt">Menunggu pembayaran…</p>
+    ${c.checkout_url ? `<a class="ghost" style="display:block;text-decoration:none;margin-top:8px;text-align:center" target="_blank" rel="noopener" href="${esc(c.checkout_url)}">Buka halaman bayar</a>` : ""}
+    <button type="button" class="ghost" data-act="depchk" style="margin-top:8px">Cek status pembayaran</button></div>`;
+}
+function depStopPoll(){ clearInterval(DEP.timer); DEP.timer = 0; }
+async function depCheck(manual){
+  const c = DEP.cur; if(!c) return;
+  try{
+    const j = await agpCall({action: "check_deposit", id: c.id});
+    if(!DEP.cur || DEP.cur.id !== c.id) return;
+    if(j.status === "paid"){ depStopPoll(); DEP.cur = null; await ppLoadMine(); flash("Saldo bertambah " + rp(c.amount) + "."); if(PG.name === "deposit"){ PG.dep = 0; renderPage(); } return; }
+    if(j.status === "expired" || j.status === "cancel"){ depStopPoll(); DEP.cur = null; flash("QRIS kedaluwarsa. Buat deposit baru."); if(PG.name === "deposit") renderPage(); return; }
+    if(manual) flash("Belum ada pembayaran masuk.");
+  }catch(e){ if(manual) flash(ppErr(e)); }
+}
+function depStartPoll(){
+  depStopPoll(); const c = DEP.cur; if(!c) return;
+  qrFill("depQr", c.qr_string);
+  const exp = c.expiry_ts || (Date.now() + 15 * 60000);
+  const tick = () => { const el = $("depCd"); if(!el){ depStopPoll(); return; }
+    const left = Math.max(0, exp - Date.now()); el.textContent = String(Math.floor(left / 60000)).padStart(2, "0") + ":" + String(Math.floor(left % 60000 / 1000)).padStart(2, "0");
+    if(left <= 0){ depStopPoll(); DEP.cur = null; renderPage(); } };
+  tick();
+  let n = 0; DEP.timer = setInterval(() => { if(PG.name !== "deposit" || !$("depCd")){ depStopPoll(); return; } tick(); if(++n % 2 === 0 && !document.hidden) depCheck(false); }, 2500);
+}
+async function depCreate(){
+  const er = $("depErr"), v = PG.dep;
+  if(!USER){ openLogin(); flash("Masuk dulu untuk isi saldo."); return; }
+  if(v < DEPOSIT.min || v > DEPOSIT.max){ er.textContent = "Nominal harus " + rp(DEPOSIT.min) + " – " + rp(DEPOSIT.max) + "."; return; }
+  if(DEP.busy) return;
+  er.textContent = ""; DEP.busy = true;
+  const btn = document.querySelector('[data-act="deposit"]'); if(btn) btn.disabled = true;
+  try{
+    const j = await agpCall({action: "create_deposit", amount: v});
+    DEP.cur = {id: j.id, amount: j.amount, qr_string: j.qr_string, checkout_url: j.checkout_url || "", expiry_ts: j.expiry_time ? Date.parse(String(j.expiry_time).replace(" ", "T") + "+07:00") || 0 : 0};
+    if(PG.name === "deposit") renderPage();
+  }catch(e){ const x = $("depErr"); if(x) x.textContent = ppErr(e); if(btn) btn.disabled = false; }
+  DEP.busy = false;
+}
+
 let PG = {name:"", tab:"a", filter:"all", dep:0};
 let cdTimer = 0;
 const pgExtra = () => (PG.name === "guide" && PG.oid) ? {item: (DB.products.find(x => x.id === PG.oid) || {}).slug} : null;
@@ -1664,18 +1747,19 @@ function renderPage(){
   const n = PG.name, body = $("pgBody");
   if(n === "deposit"){
     $("pgTitle").textContent = "Isi Saldo";
-    const deps = lsGet("alstore_deps", []);
-    body.innerHTML = `<div class="pgcard row2"><div><small>Saldo kamu</small><div class="big">${rp(getSaldo())}</div></div><span class="wic">${IC.wallet}</span></div>
+    body.innerHTML = `<div class="pgcard row2"><div><small>Saldo kamu</small><div class="big" id="depSaldo">${rp(getSaldo())}</div></div><span class="wic">${IC.wallet}</span></div>
       <div class="pgcard"><label class="lb" for="depIn">Nominal deposit (Rupiah)</label>
         <input class="in" id="depIn" inputmode="numeric" autocomplete="off" placeholder="Rp 0" value="${PG.dep ? rp(PG.dep) : ""}">
         <div class="qgrid">${DEPOSIT.quick.map(v => `<button type="button" data-act="quick" data-v="${v}">${v.toLocaleString("id-ID")}</button>`).join("")}</div>
         ${DEPOSIT.bonusText ? `<div class="bonus">${IC.gift}<span>${esc(DEPOSIT.bonusText)}</span></div>` : ""}
         <p class="mut">Minimal ${rp(DEPOSIT.min)} • Maksimal ${rp(DEPOSIT.max)}</p>
         <div class="err" id="depErr" role="alert"></div>
-        <button type="button" class="cta" data-act="deposit">${IC.wallet}Ajukan isi saldo via WhatsApp</button>
-        <p class="mut" style="margin-top:10px">Admin akan membalas dengan cara pembayaran. Saldo bertambah setelah admin mengonfirmasi.</p>
-        <button type="button" class="ghost" data-act="demoSaldo" style="margin-top:8px">+ Tambah saldo demo Rp50.000 (simulasi)</button></div>
-      <div class="pgcard"><h4 class="ph">${IC.hist}Riwayat deposit</h4>${deps.length ? deps.map(d => `<div class="hist"><b>${rp(d.amount)}</b><small>${esc(fmtDate(d.ts))} · Menunggu konfirmasi admin</small></div>`).join("") : `<p class="empty" style="text-align:center">Belum ada deposit.</p>`}</div>`;
+        <button type="button" class="cta" data-act="deposit">${IC.wallet}Bayar pakai QRIS</button>
+        <p class="mut" style="margin-top:10px">Scan QRIS, saldo bertambah otomatis setelah pembayaran terdeteksi.</p></div>
+      ${DEP.cur ? depQrCard() : ""}
+      <div class="pgcard"><h4 class="ph">${IC.hist}Riwayat deposit</h4><div id="depHist">${depHistHTML()}</div></div>`;
+    if(DEP.cur) depStartPoll();
+    depLoad();
   } else if(n === "orders"){
     $("pgTitle").textContent = "Pesanan Saya";
     const all = lsGet("alstore_orders", []);
@@ -1793,6 +1877,37 @@ function stepper(st){
   const steps = [["Pesan", "ok"], [st === "done" ? "Dibayar" : st === "fail" ? "Gagal" : "Menunggu", st === "pending" ? "on" : st === "fail" ? "bad" : "ok"], ["Sukses", st === "done" ? "ok" : "off"]];
   return `<div class="stp">${steps.map(([l, c], k) => `<div class="stp-i ${c}"><i>${c === "ok" ? "✓" : c === "bad" ? "✕" : k + 1}</i><span>${l}</span></div>`).join('<b class="stp-l"></b>')}</div>`;
 }
+/* ---------- QRIS pesanan asli (AutoGoPay) ---------- */
+const OQ = {busy: false, err: "", timer: 0};
+function oqStop(){ clearInterval(OQ.timer); OQ.timer = 0; }
+async function oqCreate(id){
+  if(OQ.busy) return;
+  const l = lsGet("alstore_orders", []), o = l.find(x => x.id === id); if(!o || o.status !== "pending" || o.pay) return;
+  OQ.busy = true; OQ.err = "";
+  try{
+    const j = await agpCall({action: "create_order_qris", ref: o.id, amount: o.total});
+    const l2 = lsGet("alstore_orders", []), o2 = l2.find(x => x.id === id);
+    if(o2){ o2.pay = {id: j.id, qr_string: j.qr_string, checkout_url: j.checkout_url || ""}; lsSet("alstore_orders", l2); }
+  }catch(e){ OQ.err = (e && e.message) || "Gagal membuat QRIS."; }
+  OQ.busy = false;
+  if(PG.name === "order" && PG.oid === id) renderPage();
+}
+async function oqCheck(id, manual){
+  const o = lsGet("alstore_orders", []).find(x => x.id === id); if(!o || !o.pay || o.status !== "pending") return;
+  try{
+    const j = await agpCall({action: "check_order", id: o.pay.id});
+    if(j.status === "paid"){ oqStop(); setOrderStatus(id, "done"); clearGuestLock(); if(PG.name === "order" && PG.oid === id) renderPage(); flash("Pembayaran berhasil."); return; }
+    if(j.status === "expired" || j.status === "cancel"){ oqStop(); setOrderStatus(id, "fail"); if(PG.name === "order" && PG.oid === id) renderPage(); return; }
+    if(manual) flash("Belum ada pembayaran masuk.");
+  }catch(e){ if(manual) flash((e && e.message) || "Gagal cek status."); }
+}
+function oqStart(id){
+  oqStop();
+  const o = lsGet("alstore_orders", []).find(x => x.id === id); if(!o) return;
+  if(!o.pay){ if(!OQ.err) oqCreate(id); return; }
+  qrFill("ordQr", o.pay.qr_string);
+  let n = 0; OQ.timer = setInterval(() => { if(PG.name !== "order" || PG.oid !== id || !$("ordQr")){ oqStop(); return; } if(++n % 2 === 0 && !document.hidden) oqCheck(id, false); }, 2500);
+}
 let orderTick = 0;
 function renderOrderPage(body){
   clearInterval(cdTimer);
@@ -1812,13 +1927,15 @@ function renderOrderPage(body){
       <div class="swp" id="swp"><div class="swp-f" id="swpF"></div><div class="swp-t">Geser untuk konfirmasi</div><div class="swp-h" id="swpH">${IC.arrow}</div></div>
       <button type="button" class="ghost out" data-act="cancel" style="margin-top:12px">Batalkan pesanan</button>`;
   } else if(o.status === "pending"){
+    const q = o.pay;
     h += `<div class="pgcard" style="text-align:center"><small>Scan QRIS untuk membayar</small>
-      <div class="qrbox">${fakeQR(o.id)}</div>
+      <div class="qrbox" id="ordQr" style="min-height:220px">${q ? '<p class="mut">Memuat QR…</p>' : (OQ.err ? `<p class="err">${esc(OQ.err)}</p>` : '<p class="mut">Membuat QRIS…</p>')}</div>
       <div class="big" style="margin-top:10px">${rp(o.total)}</div>
       <p class="mut" style="margin-top:4px">Bayar sebelum <b id="payCd">--:--</b></p>
-      <p class="mut"><b>MODE DEMO</b> · QR ini contoh dan belum bisa dipindai untuk bayar sungguhan.</p></div>
+      <p class="mut" id="ordSt">${q ? "Menunggu pembayaran…" : ""}</p>
+      ${q && q.checkout_url ? `<a class="ghost" style="display:block;text-decoration:none;margin-top:8px;text-align:center" target="_blank" rel="noopener" href="${esc(q.checkout_url)}">Buka halaman bayar</a>` : ""}</div>
       ${orderCard(o)}
-      <button type="button" class="cta" data-act="pay" style="width:100%;margin-top:12px">Saya sudah bayar (simulasi)</button>
+      ${OQ.err && !q ? `<button type="button" class="cta" data-act="oqretry" style="width:100%;margin-top:12px">Coba buat QRIS lagi</button>` : `<button type="button" class="cta" data-act="pay" style="width:100%;margin-top:12px">Cek status pembayaran</button>`}
       <button type="button" class="ghost out" data-act="cancel" style="margin-top:8px">Batalkan pesanan</button>`;
   } else if(o.status === "done"){
     h += `<div class="pgcard" style="text-align:center"><div style="font-size:44px;line-height:1;color:var(--ok)">✓</div><h2 class="pgh" style="margin-top:8px">Pembayaran sukses</h2><p class="mut">Pesananmu sedang diproses admin.</p></div>
@@ -1832,6 +1949,7 @@ function renderOrderPage(body){
   }
   body.innerHTML = h;
   if(o.status === "pending" && o.method === "Saldo") initSwipe(o);
+  if(o.status === "pending" && o.method !== "Saldo") oqStart(o.id);
   if(o.status === "pending"){
     const tick = () => { const el = $("payCd"); if(!el){ clearInterval(cdTimer); return; }
       const left = Math.max(0, deadline - Date.now()); el.textContent = String(Math.floor(left / 60000)).padStart(2, "0") + ":" + String(Math.floor(left % 60000 / 1000)).padStart(2, "0");
@@ -2251,11 +2369,12 @@ async function cloudSignIn(idToken){
   if(!cloudOn() || !idToken) return; const sb = await cloudClient(); if(!sb) return;
   const {error} = await sb.auth.signInWithIdToken({provider: "google", token: idToken});
   if(error) console.warn("Supabase login:", error.message);
-  else { cloudPull(true); try{ PPX.t = 0; PPX.loaded = false; }catch(_){} }
+  else { cloudPull(true); try{ PPX.t = 0; PPX.loaded = false; }catch(_){} ppLoadMine(); }
 }
 async function cloudSignOut(){ try{ ppReset(); }catch(_){} if(!CLOUD.sb) return; try{ await CLOUD.sb.auth.signOut(); }catch(_){} }
 if(cloudOn()){
   cloudPull(true).then(cloudSubscribe);
+  ppLoadMine();
   document.addEventListener("visibilitychange", () => { if(!document.hidden) cloudPull(false); });   /* balik ke aplikasi -> ambil data terbaru */
   setInterval(() => { if(!document.hidden) cloudPull(false); }, 60000);                             /* cadangan kalau realtime putus */
 }
@@ -2435,9 +2554,13 @@ function startProc(id){
     if(PG.proc.step < PROC_STEPS.length){ renderPage(); cdTimer = setTimeout(run, 1100); return; }
     const l = lsGet("alstore_orders", []), o = l.find(x => x.id === id);
     PG.proc = null;
-    if(!o || o.status !== "pending" || getSaldo() < o.total){ if(o){ o.status = "fail"; lsSet("alstore_orders", l); } renderPage(); flash("Saldo tidak cukup."); return; }
-    lsSet("alstore_saldo", getSaldo() - o.total);
-    setOrderStatus(id, "done"); renderPage(); flash("Pembelian berhasil.");
+    if(!o || o.status !== "pending"){ renderPage(); return; }
+    agpCall({action: "spend", amount: o.total, ref: o.id}).then(async () => {
+      await ppLoadMine(); setOrderStatus(id, "done"); renderPage(); flash("Pembelian berhasil.");
+    }).catch(async e => {
+      if(e && e.status === 402){ const l2 = lsGet("alstore_orders", []), o2 = l2.find(x => x.id === id); if(o2){ o2.status = "fail"; lsSet("alstore_orders", l2); } await ppLoadMine(); renderPage(); flash("Saldo tidak cukup."); }
+      else { renderPage(); flash((e && e.message) || "Gagal memproses. Coba lagi."); }
+    });
   };
   cdTimer = setTimeout(run, 1100);
 }
@@ -2473,7 +2596,7 @@ $("pgBody").addEventListener("click", e => {
   if(a === "tab"){ PG.tab = b.dataset.t; renderPage(); pushUrl(null, slugOfPage(PG.name, PG.tab)); }
   else if(a === "filter"){ PG.filter = b.dataset.f; renderPage(); }
   else if(a === "quick"){ PG.dep = +b.dataset.v; renderPage(); }
-  else if(a === "demoSaldo"){ lsSet("alstore_saldo", getSaldo() + 50000); renderPage(); flash("Saldo demo ditambah."); }
+  else if(a === "depchk"){ depCheck(true); }
   else if(a === "cp" || a === "cpk") copyText(b.dataset.id);
   else if(a === "payview"){ showPage("order", "a", b.dataset.id); }
   else if(a === "trk"){ if(PG.name !== "orders") showPage("orders", "b"); PG.tab = "b"; renderPage(); pushUrl(null, slugOfPage(PG.name, "b")); $("trkIn").value = b.dataset.id; trackOrder(b.dataset.id); }
@@ -2489,21 +2612,20 @@ $("pgBody").addEventListener("click", e => {
   else if(a === "dlf"){ const u = b.dataset.u; if(/^https?:\/\//i.test(u)) window.open(u, "_blank", "noopener"); else flash("Link unduhan belum diisi admin."); }
   else if(a === "video"){ const u = b.dataset.u; if(/^https?:\/\//i.test(u)) window.open(u, "_blank", "noopener"); else flash("Link video belum tersedia."); }
   else if(a === "eye"){ const c = b.parentNode.querySelector("code"); if(c){ const hid = c.dataset.hid === "1"; c.textContent = hid ? c.dataset.full : maskKey(c.dataset.full); c.dataset.hid = hid ? "0" : "1"; b.innerHTML = hid ? IC.xeyeoff : IC.xeye; } }
-  else if(a === "pay"){ setOrderStatus(PG.oid, "done"); renderPage(); flash("Pembayaran berhasil (demo)."); }
-  else if(a === "cancel"){ setOrderStatus(PG.oid, "fail"); clearGuestLock(); renderPage(); }
-  else if(a === "deposit"){
-    const v = PG.dep, er = $("depErr");
-    if(v < DEPOSIT.min || v > DEPOSIT.max){ er.textContent = "Nominal harus " + rp(DEPOSIT.min) + " – " + rp(DEPOSIT.max) + "."; return; }
-    er.textContent = "";
-    const l = lsGet("alstore_deps", []); l.unshift({amount:v, ts:Date.now()}); lsSet("alstore_deps", l.slice(0, 50));
-    window.open(waLink("Halo admin, saya mau isi saldo.\nNominal: " + rp(v)), "_blank", "noopener"); renderPage();
+  else if(a === "pay"){ oqCheck(PG.oid, true); }
+  else if(a === "oqretry"){ OQ.err = ""; renderPage(); }
+  else if(a === "cancel"){
+    const o0 = lsGet("alstore_orders", []).find(x => x.id === PG.oid);
+    if(o0 && o0.pay){ agpCall({action: "cancel", id: o0.pay.id}).catch(() => {}); }
+    oqStop(); setOrderStatus(PG.oid, "fail"); clearGuestLock(); renderPage();
   }
+  else if(a === "deposit"){ depCreate(); }
   else if(a === "ppcat"){ PG.cat = b.dataset.id; PG.brand = ""; PG.sel = ""; PG.q = ""; PG.ppno = ""; PG.ppzone = ""; renderPage(); }
   else if(a === "ppbrand"){ PG.brand = b.dataset.b; renderPage(); }
   else if(a === "ppsel"){ PG.sel = b.dataset.id; renderPage(); const f = $("ppForm"); if(f) f.scrollIntoView({block:"center"}); }
   else if(a === "ppretry"){ PPD.err = ""; renderPage(); }
   else if(a === "ppob"){ ppBuy(); }
-  else if(a === "ppdep"){ window.open(waLink("Halo admin, saya mau isi saldo PPOB.\nEmail: " + (USER ? USER.email : "") + "\nNominal: Rp"), "_blank", "noopener"); }
+  else if(a === "ppdep"){ showPage("deposit"); }
   else if(a === "asadd"){ asApply(1); }
   else if(a === "assub"){ asApply(-1); }
   else if(a === "like"){
