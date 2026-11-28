@@ -543,6 +543,10 @@ html[data-theme="light"] .kbox code{color:#15803d}
 @keyframes spOut{to{opacity:0;visibility:hidden}}
 @media (prefers-reduced-motion:reduce){#splash img{animation-duration:.01s}}
 </style>
+<style>
+.tile.off img,.tile.off .box{filter:grayscale(.75) brightness(.55)}
+.tile .mnt{position:absolute;left:8px;top:8px;z-index:2;background:#f5b400;color:#1a1200;font-weight:800;font-size:10px;letter-spacing:.06em;padding:3px 9px;border-radius:999px;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+</style>
 </head>
 <body>
 <script>
@@ -852,15 +856,24 @@ function tile(p){
   const inner = p.img
     ? `<img src="${esc(p.img)}" alt="${esc(p.name)}" loading="lazy">`
     : `<div class="box" style="color:#fff;background:linear-gradient(160deg,hsl(${p.hue} 70% 18%),#05020c);border:2px solid hsl(${p.hue} 90% 58%);box-shadow:0 0 18px hsl(${p.hue} 90% 50% / .45)">${esc(p.short)}</div>`;
-  return `<div class="tile">${inner}<span class="plat">${esc(p.platform)}</span></div>`;
+  const off = dripOff(p);
+  return `<div class="tile${off ? " off" : ""}">${inner}<span class="plat">${esc(p.platform)}</span>${off ? `<span class="mnt">${off === "maintenance" ? "MAINTENANCE" : "STOK HABIS"}</span>` : ""}</div>`;
 }
+/* produk Drip yang semua paketnya tidak bisa dibeli: "maintenance" atau "empty" ("" = ada yang bisa dibeli) */
+function dripOff(p){
+  if(!p.drip || !p.packages.length || p.packages.some(k => k[3] === "ready")) return "";
+  return p.packages.some(k => k[3] === "maintenance") ? "maintenance" : "empty";
+}
+/* urutan produk di beranda: FF PROXY dulu, lalu NON ROOT, IOS, ROOT, PC; produk yang tidak bisa dibeli di paling bawah tiap kategori */
+const ALL_ORDER = ["FF PROXY", "NON ROOT", "IOS PANEL", "ROOT PANEL", "PC PANEL"];
+function gridRank(p){ const i = ALL_ORDER.indexOf(p.cat); return (i < 0 ? ALL_ORDER.length : i) * 2 + (dripOff(p) ? 1 : 0); }
 const minPrice = p => Math.min(...p.packages.map(x => x[1]));
 function card(p, rank){
   return `<article class="card">${rank ? `<span class="rank">#${rank}</span>` : ""}${tile(p)}
     <div class="name">${esc(p.name)}</div>
     <div><small>Mulai dari</small><div class="price">${rp(minPrice(p))}</div></div>
     ${p.sold ? `<div class="sold">${p.sold.toLocaleString("id-ID")} terjual</div>` : ""}
-    <button class="go" data-id="${esc(p.id)}">Beli</button></article>`;
+    <button class="go" data-id="${esc(p.id)}">${dripOff(p) ? "Detail" : "Beli"}</button></article>`;
 }
 function gridCard(p){
   const star = '<svg viewBox="0 0 24 24" width="14" height="14" fill="#facc15" aria-hidden="true"><path d="M12 2l3 6.9 7.5.7-5.7 5 1.7 7.4L12 18.1 5.5 22l1.7-7.4-5.7-5 7.5-.7z"/></svg>';
@@ -870,7 +883,7 @@ function gridCard(p){
       <div class="pn go" data-id="${esc(p.id)}">${esc(p.name)}</div>
       ${pill}
       <div class="pp"><span class="pf">Mulai dari</span>${rp(minPrice(p))}</div>
-      <button type="button" class="go pbtn" data-id="${esc(p.id)}">${IC.bag}Beli</button></div></article>`;
+      <button type="button" class="go pbtn" data-id="${esc(p.id)}">${IC.bag}${dripOff(p) ? "Detail" : "Beli"}</button></div></article>`;
 }
 function renderRail(){
   const pop = DB.products.filter(p => p.popular).sort((a,b) => a.popular - b.popular);
@@ -887,7 +900,7 @@ function renderPills(){
 }
 function renderGrid(){
   const q = S.q.trim().toLowerCase();
-  const list = DB.products.filter(p => (S.cat==="ALL" || p.cat===S.cat) && p.name.toLowerCase().includes(q));
+  const list = DB.products.filter(p => (S.cat==="ALL" || p.cat===S.cat) && p.name.toLowerCase().includes(q)).sort((a, b) => gridRank(a) - gridRank(b));
   const dz = typeof DRIP !== "undefined" ? DRIP : {};
   $("grid").innerHTML = list.length ? list.map(p => gridCard(p)).join("") : `<p class="empty">${dz.pending ? "Memuat produk…" : dz.failed ? "Gagal memuat produk. Muat ulang halaman." : !q && S.cat !== "ALL" ? "Belum ada produk di kategori ini." : "Produk tidak ditemukan."}</p>`;
 }
