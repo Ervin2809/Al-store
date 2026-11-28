@@ -690,6 +690,8 @@ const LOGO_MARK = "data:image/webp;base64,UklGRmLNAQBXRUJQVlA4WAoAAAAQAAAA/wEA/w
 const CONFIG = {
   supabaseUrl: "https://oktbpyuyveqegukfeydy.supabase.co",       // isi: Project URL dari Supabase (https://xxxx.supabase.co)
   supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rdGJweXV5dmVxZWd1a2ZleWR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU3NzcwMDIsImV4cCI6MjExMTM1MzAwMn0.Z4OxloR_WEwTWBUSd9J4nyHMRCVjvql028xGHlWWaU4",       // isi: anon / publishable key dari Supabase (BUKAN service_role)
+  dripUrl: "https://dripervin.al-store.biz.id",   // Worker katalog Drip
+  dripBuy: false,   // ubah ke true HANYA setelah pembelian key dari Drip (pengiriman key asli) sudah dipasang
   keyPrefix: "",   // opsional: 4 huruf awal key, mis. "rezz" -> rezz-xxxx-xxxx. Kosong = acak semua
   googleClientId: "819412954986-q3fp052r1ts6i23f2imt2rt1ggggqt8m.apps.googleusercontent.com",           // isi Client ID dari Google Cloud Console (xxxx.apps.googleusercontent.com) agar tombol Google aktif
   brandA: "Al", brandB: "STORE",
@@ -766,7 +768,7 @@ function normDB(d){
     cat: p.cat || "Lainnya", platform: p.platform || "ANDROID", hue: 262 + ((+p.hue || 0) % 50), img: p.img || "", sold: p.sold || 0, rating: Math.min(5, Math.max(0, +p.rating || 0)), reviews: Math.max(0, Math.round(+p.reviews || 0)),
     desc: p.desc || "", how: Array.isArray(p.how) ? p.how : [],
     packages: (Array.isArray(p.packages) ? p.packages : []).filter(k => k && k[0] && k[1] > 0),
-    popular: p.popular || 0, slug: p.slug || "",
+    popular: p.popular || 0, slug: p.slug || "", drip: p.drip ? 1 : 0,
     files: (p.files && typeof p.files === "object") ? p.files : null, setup: (p.setup && typeof p.setup === "object") ? p.setup : null, ver: p.ver || ""
   })).filter(p => p.packages.length);
   ensureSlugs(products);
@@ -886,7 +888,8 @@ function renderPills(){
 function renderGrid(){
   const q = S.q.trim().toLowerCase();
   const list = DB.products.filter(p => (S.cat==="ALL" || p.cat===S.cat) && p.name.toLowerCase().includes(q));
-  $("grid").innerHTML = list.length ? list.map(p => gridCard(p)).join("") : `<p class="empty">${!q && S.cat !== "ALL" ? "Belum ada produk di kategori ini." : "Produk tidak ditemukan."}</p>`;
+  const dz = typeof DRIP !== "undefined" ? DRIP : {};
+  $("grid").innerHTML = list.length ? list.map(p => gridCard(p)).join("") : `<p class="empty">${dz.pending ? "Memuat produk…" : dz.failed ? "Gagal memuat produk. Muat ulang halaman." : !q && S.cat !== "ALL" ? "Belum ada produk di kategori ini." : "Produk tidak ditemukan."}</p>`;
 }
 
 /* ---------- banner ---------- */
@@ -991,9 +994,10 @@ function renderDrawer(){
   const nm = (USER && USER.name) || S.guest || "Tamu";
   $("drawerUser").innerHTML = `<div class="row"><div class="av">${esc(nm[0].toUpperCase())}</div>
     <div><div class="nm">@${esc(nm)}</div><span class="role">${isAdmin() ? "Admin" : "Member"}</span></div></div>
-    <div class="sal-box"><div><small>SALDO KAMU</small><b>${rp(getSaldo())}</b></div><button type="button" class="topup" data-dm="topup"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Isi Saldo</button></div>
+    <div class="sal-box"><div><small>${dripSaldoOn() ? "SALDO DRIP" + (DBAL.usd ? " · $" + esc(DBAL.usd) : "") : "SALDO KAMU"}</small><b>${rp(getSaldo())}</b></div><button type="button" class="topup" data-dm="topup"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Isi Saldo</button></div>
     <div class="ubtns"><button type="button" class="ghost" data-dm="hist">Riwayat Order</button><button type="button" class="ghost out" data-dm="logout">Logout</button></div>`;
   $("adminSlot").innerHTML = isAdmin() ? `<a href="#" data-dm="admin" role="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5z" fill="currentColor"/><path d="M9 12l2 2 4-4" stroke="#07040f"/></svg><span>Panel Admin</span></a><a href="#" data-dm="adminguide" role="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg><span>Kelola Link Panduan</span></a>` : "";
+  try{ if(dripSaldoOn()){ const t = $("drawerUser").querySelector(".topup"); if(t) t.style.setProperty("display", "none", "important"); } syncPpobMenu(); }catch(_){}
 }
 let LG_MODE = "login";
 function openLogin(mode){
@@ -1038,7 +1042,7 @@ function onGoogle(resp){
     USER = {name: d.name || d.email.split("@")[0], email: String(d.email).toLowerCase(), pic: d.picture || "", via: "google"};
     runLoad(() => {
     lsSet("alstore_user", USER); S.guest = USER.name; fillBuyer(); try{ cloudSignIn(resp.credential); }catch(_){}
-    closeAll(); syncPay(); flash("Login berhasil. Halo, " + USER.name + "!");
+    closeAll(); syncPay(); dripBalLoad(true); flash("Login berhasil. Halo, " + USER.name + "!");
     if(PENDING_SLUG){ const h = PENDING_SLUG; PENDING_SLUG = ""; openBySlug(h); } else openDrawer();
     });
   }catch(_){ const e = $("lgErr"); if(e) e.textContent = "Login Google gagal. Coba lagi."; }
@@ -1076,7 +1080,7 @@ function syncPay(){ try{ if(!$("productView").hidden) updTotal(); }catch(_){} }
 function loginOk(acc){ runLoad(() => {
   USER = {name: acc.name, email: acc.email};
   lsSet("alstore_user", USER); S.guest = USER.name; fillBuyer();
-  closeAll(); syncPay(); flash("Login berhasil. Halo, " + USER.name + "!");
+  closeAll(); syncPay(); dripBalLoad(true); flash("Login berhasil. Halo, " + USER.name + "!");
   if(PENDING_SLUG){ const h = PENDING_SLUG; PENDING_SLUG = ""; openBySlug(h); } else openDrawer();
 }); }
 async function doLogin(){
@@ -1109,7 +1113,8 @@ function renderAdminPage(body){
   const stat = (l, v) => `<div class="pgcard" style="margin:0;text-align:center"><small class="mut">${l}</small><div style="font-weight:800;font-size:18px">${v}</div></div>`;
   body.innerHTML = `<p class="mut" style="margin:0 0 12px">${esc(USER.email)} · data dari perangkat ini</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${stat("Produk", DB.products.length)}${stat("Pesanan", orders.length)}${stat("Menunggu", pending)}${stat("Total order", rp(sum))}</div>
-    <button type="button" class="cta" data-gonav="adminmarkup" style="margin-top:0">Markup Harga</button>
+    <button type="button" class="cta" data-gonav="admindrip" style="margin-top:0">Produk Drip &amp; Harga</button>
+    <button type="button" class="cta" data-gonav="adminmarkup" style="margin-top:10px">Markup Harga</button>
     <button type="button" class="cta" data-gonav="adminbanner" style="margin-top:10px">Kelola Banner Beranda</button>
     <button type="button" class="cta" data-gonav="adminlb" style="margin-top:10px">Edit Leaderboard</button>
     <button type="button" class="cta" data-gonav="adminguide" style="margin-top:10px">Kelola Link Panduan</button>
@@ -1121,7 +1126,7 @@ function renderAdminPage(body){
     <div class="pgcard"><h4 class="ph">Deposit terbaru</h4>${deps.length ? deps.slice(0, 20).map(d => `<div class="hist"><b>${rp(d.amount)}</b><br><small>${esc(fmtDate(d.ts))}</small></div>`).join("") : `<p class="mut">Belum ada deposit.</p>`}</div>
     <a class="cta" style="text-decoration:none" href="${waLink("Halo admin.")}" target="_blank" rel="noopener">Buka WhatsApp Admin</a>`;
 }
-function openDrawer(){ renderDrawer(); ovPush(); $("ov").hidden = false; $("drawer").hidden = false; $("closeD").focus(); }
+function openDrawer(){ renderDrawer(); dripBalLoad(); ovPush(); $("ov").hidden = false; $("drawer").hidden = false; $("closeD").focus(); }
 function infoModal(t, txt){ openModal(`<div class="hd"><h5>${esc(t)}</h5><button class="x" data-close aria-label="Tutup"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><div class="info">${esc(txt)}</div>`); }
 let DEFERRED_INSTALL = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); DEFERRED_INSTALL = e; });
@@ -1168,7 +1173,7 @@ $("drawer").addEventListener("click", e => {
   else if(k === "ppob") showPage("ppob", "a");
   else if(k === "app") installApp();
   else if(k === "app_old") infoModal("Pasang Aplikasi", "1. Buka menu browser (titik tiga).\n2. Pilih \"Tambahkan ke layar utama\" atau \"Install aplikasi\".\n3. Konfirmasi, lalu buka toko dari layar utama.");
-  else if(k === "logout"){ runLoad(() => { USER = null; try{ localStorage.removeItem("alstore_user"); }catch(_){} try{ cloudSignOut(); }catch(_){} S.guest = ""; fillBuyer(); closeAll(); syncPay(); flash("Kamu sudah keluar."); if(!$("pageView").hidden || !$("productView").hidden) showHome(); }); }
+  else if(k === "logout"){ runLoad(() => { USER = null; DBAL.idr = null; DBAL.usd = null; try{ localStorage.removeItem("alstore_user"); }catch(_){} try{ cloudSignOut(); }catch(_){} S.guest = ""; fillBuyer(); closeAll(); syncPay(); flash("Kamu sudah keluar."); if(!$("pageView").hidden || !$("productView").hidden) showHome(); }); }
 });
 $("menuBtn").onclick = () => { if(USER) openDrawer(); else openLogin(); };
 $("modal").addEventListener("click", e => { if(e.target.id === "lgGo") doLogin(); const sw = e.target.closest("[data-lgmode]"); if(sw){ e.preventDefault(); openLogin(sw.dataset.lgmode); } });
@@ -1183,7 +1188,7 @@ const PRODUCT_PATHS = false;   // true: /produk/nama-produk (butuh route Worker)
 let ROUTING = false;
 function brandName(){ return [CONFIG.brandA, CONFIG.brandB].filter(Boolean).join(""); }
 /* link per halaman: ?produk=slug | ?halaman=deposit|riwayat|lacak|leaderboard|cek-id|status-like|cara-beli|faq|syarat|privasi */
-const PAGE_SLUGS = {"admin-leaderboard":["adminlb","a",1], "admin-markup":["adminmarkup","a",1], "admin-teks-berjalan":["adminticker","a",1], "admin-platform":["adminplat","a",1], "admin-banner":["adminbanner","a",1], "admin-saldo":["adminsaldo","a",1], "admin-produk-ppob":["adminppc","a",1], admin:["admin","a",1], "admin-panduan":["adminguide","a",1], panduan:["guide","a",1], "riwayat-key":["keys","a",1], pesanan:["order","a",0], deposit:["deposit","a",1], riwayat:["orders","a",1], lacak:["orders","b",1], leaderboard:["lb","a",0], "cek-id":["like","a",1], "status-like":["like","b",1], ppob:["ppob","a",1], "riwayat-ppob":["ppob","b",1]};
+const PAGE_SLUGS = {"admin-leaderboard":["adminlb","a",1], "admin-markup":["adminmarkup","a",1], "admin-drip":["admindrip","a",1], "admin-teks-berjalan":["adminticker","a",1], "admin-platform":["adminplat","a",1], "admin-banner":["adminbanner","a",1], "admin-saldo":["adminsaldo","a",1], "admin-produk-ppob":["adminppc","a",1], admin:["admin","a",1], "admin-panduan":["adminguide","a",1], panduan:["guide","a",1], "riwayat-key":["keys","a",1], pesanan:["order","a",0], deposit:["deposit","a",1], riwayat:["orders","a",1], lacak:["orders","b",1], leaderboard:["lb","a",0], "cek-id":["like","a",1], "status-like":["like","b",1], ppob:["ppob","a",1], "riwayat-ppob":["ppob","b",1]};
 const INFO_SLUGS = {"cara-beli":"how", faq:"faq", syarat:"terms", privasi:"privacy"};
 const slugOfPage = (n, t) => Object.keys(PAGE_SLUGS).find(k => PAGE_SLUGS[k][0] === n && PAGE_SLUGS[k][1] === (t || "a")) || "";
 const slugOfInfo = k => Object.keys(INFO_SLUGS).find(x => INFO_SLUGS[x] === k) || "";
@@ -1279,17 +1284,39 @@ function openProduct(id){
   pushUrl(p); document.title = p.name + " — " + brandName();
 }
 function renderPkgs(){
-  $("pk").innerHTML = prod().packages.map((k,i) =>
-    `<button class="pkg" data-i="${i}" aria-pressed="${S.pkg===i}"><small>${esc(k[0])}</small><b>${rp(k[1])}</b><br><i>Stok tersedia</i></button>`).join("");
+  const p = prod(), off = k => !!(p.drip && k[3] && k[3] !== "ready");
+  if(off(p.packages[S.pkg] || [])){ const f = p.packages.findIndex(k => !off(k)); S.pkg = f < 0 ? 0 : f; }
+  $("pk").innerHTML = p.packages.map((k,i) => {
+    const lab = !p.drip || !off(k) ? "Stok tersedia" : (k[3] === "maintenance" ? "Maintenance" : "Stok habis");
+    return `<button class="pkg" data-i="${i}" aria-pressed="${S.pkg===i}"${off(k) ? ' disabled style="opacity:.45"' : ""}><small>${esc(k[0])}</small><b>${rp(k[1])}</b><br><i>${lab}</i></button>`;
+  }).join("");
 }
 function setTab(t){
   S.tab = "buy"; $("tBuy").hidden = false;
 }
 const PPX = {saldo: null, orders: [], loaded: false, loading: false, busy: false, t: 0, timer: null, chs: null, deb: 0};
-const getSaldo = () => Math.max(0, Number(PPX.saldo) || 0);   /* saldo asli dari server (profiles.saldo) */
+var DBAL = {idr: null, usd: null, t: 0, busy: false};   /* saldo wallet Drip (khusus admin) */
+const dripSaldoOn = () => isAdmin() && DBAL.idr != null;
+const getSaldo = () => dripSaldoOn() ? Math.max(0, Number(DBAL.idr) || 0) : Math.max(0, Number(PPX.saldo) || 0);   /* member: profiles.saldo; admin: saldo Drip */
+async function dripBalLoad(force){
+  const url = String(CONFIG.dripUrl || "").replace(/\/$/, "");
+  if(!url || !isAdmin() || DBAL.busy || (!force && Date.now() - DBAL.t < 20000)) return;
+  DBAL.busy = true;
+  try{
+    const s = await ppSession(); if(!s) return;
+    const r = await fetch(url + "/admin/balance", {method: "POST", headers: {"Content-Type": "application/json", Authorization: "Bearer " + s.session.access_token}, body: "{}"});
+    const j = await r.json().catch(() => ({}));
+    if(r.ok && Number.isFinite(j.idr)){ DBAL.idr = j.idr; DBAL.usd = j.usd; }
+  }catch(_){}
+  DBAL.t = Date.now(); DBAL.busy = false;
+  try{ ppRerender(); if(!$("drawer").hidden) renderDrawer(); }catch(_){}
+}
+const PPOB_MIN = 10000;   /* menu PPOB baru muncul kalau saldo >= Rp10.000 */
+function syncPpobMenu(){ const ok = getSaldo() >= PPOB_MIN; document.querySelectorAll('[data-dm="ppob"]').forEach(a => { if(ok) a.style.removeProperty("display"); else a.style.setProperty("display", "none", "important"); }); }
 function refreshPay(total){
   const b = document.querySelector('.pay[data-m="Saldo"]'); if(!b) return;
-  if(!USER){
+  const pd = (() => { try{ return prod(); }catch(_){ return null; } })();
+  if(!USER || (dripSaldoOn() && !(pd && pd.drip))){   /* admin: saldo Drip hanya untuk produk Drip */
     b.hidden = true; b.style.display = "none";
     if(S.pay === "Saldo"){ S.pay = "QRIS"; document.querySelectorAll(".pay").forEach(x => x.setAttribute("aria-pressed", x.dataset.m === "QRIS")); }
     return;
@@ -1297,7 +1324,8 @@ function refreshPay(total){
   b.hidden = false; b.style.display = "";
   const sal = getSaldo(), ok = sal >= total, sm = b.querySelector("small");
   b.classList.toggle("nsf", !ok); b.disabled = false; b.setAttribute("aria-disabled", String(!ok));
-  sm.textContent = ok ? "Bayar pakai saldo · Saldo kamu " + rp(sal) : "Saldo tidak cukup · Saldo kamu " + rp(sal);
+  const sn = dripSaldoOn() ? "Saldo Drip" : "Saldo kamu";
+  sm.textContent = ok ? "Bayar pakai saldo · " + sn + " " + rp(sal) : "Saldo tidak cukup · " + sn + " " + rp(sal);
   if(!ok && S.pay === "Saldo"){
     S.pay = "QRIS";
     document.querySelectorAll(".pay").forEach(x => x.setAttribute("aria-pressed", x.dataset.m === "QRIS"));
@@ -1350,6 +1378,7 @@ function orderMsg(o){
     "\nProduk: " + o.name + "\nPaket: " + o.pkg + " x" + o.qty + "\nTotal: " + rp(o.total) + "\nMetode bayar: " + o.method + (keysOf(o).length ? "\nKey: " + keysOf(o).join(", ") : "");
 }
 $("buy").onclick = () => {
+  { const p0 = prod(), k0 = p0.packages[S.pkg]; if(p0.drip){ if(!k0 || k0[3] !== "ready"){ flash("Paket ini sedang tidak tersedia."); return; } if(!CONFIG.dripBuy){ flash("Pembelian produk ini segera dibuka."); return; } } }
   const name = (USER && USER.name) || S.guest || "Tamu";
   if(!USER && S.pay === "Saldo") S.pay = "QRIS";
   $("err").textContent = "";
@@ -1437,7 +1466,7 @@ function ppErr(e){ return e && (e.status === 401 || e.message === "LOGIN") ? "Or
 async function agpCall(body){
   const s = await ppSession();
   const tok = s ? s.session.access_token : CONFIG.supabaseKey;
-  const r = await fetch("https://vinzprostore.web.id/", {method: "POST", headers: {"Content-Type": "application/json", apikey: CONFIG.supabaseKey, Authorization: "Bearer " + tok}, body: JSON.stringify(body)});
+  const r = await fetch("https://autogopay.vinzprostore.workers.dev/", {method: "POST", headers: {"Content-Type": "application/json", apikey: CONFIG.supabaseKey, Authorization: "Bearer " + tok}, body: JSON.stringify(body)});
   let j = {}; try{ j = await r.json(); }catch(_){}
   if(!r.ok){ const e = new Error(j.error || "Gagal memproses. Coba lagi."); e.status = r.status; throw e; }
   return j;
@@ -1470,6 +1499,7 @@ function ppRerender(){
   const d = $("depSaldo"); if(d) d.textContent = rp(getSaldo());
   try{ if(!$("productView").hidden) updTotal(); }catch(_){}
   const h = $("ppHist"); if(h) h.innerHTML = ppHistHTML();
+  try{ syncPpobMenu(); }catch(_){}
 }
 function ppReset(){
   PPX.saldo = null; PPX.orders = []; PPX.loaded = false; PPX.t = 0;
@@ -1619,8 +1649,11 @@ document.addEventListener("input", e => {
 });
 const DEPOSIT = {min:1000, max:5000000, quick:[10000,20000,50000,100000,200000,500000], bonusText:""}; // bonusText: isi promo bonus jika ada
 const LEADERBOARD = {top:[], last:[]}; // isi: [{name:"ab***", orders:12, total:"Rp 50.000"}] (urut peringkat 1 dst)
-const lsGet = (k, d) => { try{ const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; }catch(_){ return d; } };
-const lsSet = (k, v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} try{ cloudPush(k, v); }catch(_){} };
+/* riwayat pesanan dipisah per akun: login akun lain di HP yang sama tidak melihat riwayat akun ini. Tanpa login = riwayat tamu */
+const LS_PER_USER = ["alstore_orders", "alstore_active", "alstore_deps", "alstore_gdone"];
+const lsKey = k => (USER && USER.email && LS_PER_USER.indexOf(k) >= 0) ? k + ":" + String(USER.email).toLowerCase() : k;
+const lsGet = (k, d) => { try{ const v = JSON.parse(localStorage.getItem(lsKey(k))); return v == null ? d : v; }catch(_){ return d; } };
+const lsSet = (k, v) => { try{ localStorage.setItem(lsKey(k), JSON.stringify(v)); }catch(_){} try{ cloudPush(k, v); }catch(_){} };
 const ic = (d, f) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="${f ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const IC = {
   hist:ic('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>'),
@@ -1736,7 +1769,7 @@ const pgExtra = () => (PG.name === "guide" && PG.oid) ? {item: (DB.products.find
 function showPage(name, tab, extra){
   { const lk = guestLock(); if(lk && name !== "guide"){ name = "order"; tab = "a"; extra = lk; } }
   if(/^admin/.test(name) && !isAdmin()){ flash("Akses khusus admin."); return; }
-  closeAll(); clearInterval(cdTimer); PG.proc = null; if(name === "adminguide") GA = null; if(name === "adminmarkup") MK = null; if(name === "adminbanner") BN = null; if(name === "adminlb") LBE = null; if(name === "adminticker") TKE = null; if(name === "adminplat") PLE = null; if(name === "adminppc") PPCE = null;
+  closeAll(); clearInterval(cdTimer); PG.proc = null; if(name === "adminguide") GA = null; if(name === "adminmarkup") MK = null; if(name !== "admindrip") DRA = null; if(name === "adminbanner") BN = null; if(name === "adminlb") LBE = null; if(name === "adminticker") TKE = null; if(name === "adminplat") PLE = null; if(name === "adminppc") PPCE = null;
   PG = {name, tab: tab || "a", filter:"all", dep: PG.dep || 0, oid: extra || ""};
   $("homeView").hidden = true; $("productView").hidden = true; $("pageView").hidden = false;
   renderPage(); restoreScroll(); pushUrl(null, slugOfPage(name, PG.tab), pgExtra());
@@ -1747,7 +1780,7 @@ function renderPage(){
   const n = PG.name, body = $("pgBody");
   if(n === "deposit"){
     $("pgTitle").textContent = "Isi Saldo";
-    body.innerHTML = `<div class="pgcard row2"><div><small>Saldo kamu</small><div class="big" id="depSaldo">${rp(getSaldo())}</div></div><span class="wic">${IC.wallet}</span></div>
+    body.innerHTML = `<div class="pgcard row2"><div><small>${dripSaldoOn() ? "Saldo Drip" : "Saldo kamu"}</small><div class="big" id="depSaldo">${rp(getSaldo())}</div></div><span class="wic">${IC.wallet}</span></div>
       <div class="pgcard"><label class="lb" for="depIn">Nominal deposit (Rupiah)</label>
         <input class="in" id="depIn" inputmode="numeric" autocomplete="off" placeholder="Rp 0" value="${PG.dep ? rp(PG.dep) : ""}">
         <div class="qgrid">${DEPOSIT.quick.map(v => `<button type="button" data-act="quick" data-v="${v}">${v.toLocaleString("id-ID")}</button>`).join("")}</div>
@@ -1783,6 +1816,8 @@ function renderPage(){
     renderGA();
   } else if(n === "adminsaldo"){
     renderAS();
+  } else if(n === "admindrip"){
+    renderDRP();
   } else if(n === "adminmarkup"){
     renderMK();
   } else if(n === "adminbanner"){
@@ -2114,7 +2149,7 @@ let MK = null, BN = null;
    Kalau nanti DB diganti dari API: panggil captureBase(); applyMarkup(); refreshAll(); */
 function captureBase(){ DB.products.forEach(p => { p.base = p.packages.map(k => k[1]); }); }
 function markupOf(p){ const m = lsGet(MK_KEY, {g: 0, p: {}}), v = m.p && m.p[p.id]; return Math.max(0, Math.round(+(v != null && v !== "" ? v : m.g) || 0)); }
-function applyMarkup(){ DB.products.forEach(p => { const mk = markupOf(p); p.packages.forEach((k, i) => { k[1] = (p.base[i] != null ? p.base[i] : k[1]) + mk; }); }); }
+function applyMarkup(){ DB.products.forEach(p => { if(p.drip) return; const mk = markupOf(p); p.packages.forEach((k, i) => { k[1] = (p.base[i] != null ? p.base[i] : k[1]) + mk; }); }); }
 function applyBannerOverride(){ const bo = lsGet(BN_KEY, null); if(Array.isArray(bo)) DB.banners = normDB({banners: bo}).banners; }
 /* ---------- teks berjalan & label platform (edit dari panel admin) ---------- */
 const TK_KEY = "alstore_ticker", PL_KEY = "alstore_plat";
@@ -2384,7 +2419,7 @@ function renderMK(){
   $("pgTitle").textContent = "Markup Harga";
   if(!MK) mkLoad();
   const num = v => Math.max(0, Math.round(+v || 0));
-  const rows = DB.products.map(p => {
+  const rows = DB.products.filter(p => !p.drip).map(p => {
     const own = MK.p[p.id], mk = num(own != null && own !== "" ? own : MK.g);
     return `<div class="pgcard"><b>${esc(p.name)}</b> <small class="mut">${esc(p.platform)}</small>
       <label class="lb" style="display:block;margin-top:8px">Markup produk ini (Rp) — kosong = pakai markup umum</label>
@@ -2657,8 +2692,138 @@ $("pgBody").addEventListener("click", e => {
   }catch(_){} };
   const lg = DB.shop && DB.shop.logo; if(lg){ const im = new Image(); im.onload = () => run(im); im.onerror = () => run(null); im.src = lg; } else run(null);
 })();
+
+/* ================= PRODUK DRIP (otomatis dari Worker) + PANEL ADMIN HARGA ================= */
+const DRIP = {url: String(CONFIG.dripUrl || "").replace(/\/$/, ""), loading: null, pending: false, failed: false};
+if(DRIP.url){ DB.products = []; DRIP.pending = true; }   /* produk contoh tidak ditampilkan; produk asli dari Drip */
+const DRIP_PLAT = {"Android": "ANDROID", "iOS": "iOS", "Android & iOS": "ANDROID + iOS"};
+function dripHue(t){ let h = 0; for(const c of String(t)) h = (h * 31 + c.charCodeAt(0)) % 50; return 262 + h; }
+function dripMap(p){
+  return {id: "d-" + p.code, name: p.title, short: p.title, cat: String(p.category || "Lainnya").toUpperCase().replace(/-/g, " ").replace(/\s+/g, " ").trim(), platform: DRIP_PLAT[p.platform] || String(p.platform || "ANDROID").toUpperCase(),
+    hue: dripHue(p.code), img: p.image || "", sold: 0, popular: 0, drip: 1,
+    packages: (p.items || []).map(i => [i.duration || i.label, i.price, i.sku, i.status, i.stock])};
+}
+function dripLoad(){
+  if(!DRIP.url) return Promise.resolve(false);
+  if(DRIP.loading) return DRIP.loading;
+  DRIP.loading = fetch(DRIP.url + "/catalog").then(r => r.json().then(j => ({ok: r.ok, j}))).then(({ok, j}) => {
+    if(!ok || !Array.isArray(j.products)) throw new Error("catalog");
+    const list = normDB({products: j.products.map(dripMap)}).products;
+    if(!list.length) throw new Error("kosong");
+    DB.products = list; DRIP.failed = false;
+    captureBase(); applyMarkup(); applyPlatOverride(); refreshAll();
+    return true;
+  }).catch(() => { if(!DB.products.length){ DRIP.failed = true; renderGrid(); } return false; }).finally(() => { DRIP.loading = null; DRIP.pending = false; });
+  return DRIP.loading;
+}
+
+var DRA = null;
+function renderDRP(){
+  $("pgTitle").textContent = "Produk Drip & Harga";
+  if(!DRA){ DRA = {data: null, edits: {}, err: "", busy: false}; draFetch(); }
+  draPaint();
+}
+async function draFetch(){
+  const me = DRA; if(!me) return;
+  try{
+    const s = await ppSession(); if(!s) throw new Error("Login Google sebagai admin dulu.");
+    const r = await fetch(DRIP.url + "/admin/catalog", {method: "POST", headers: {"Content-Type": "application/json", Authorization: "Bearer " + s.session.access_token}, body: "{}"});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(j.error || "Gagal memuat produk Drip.");
+    me.data = j; me.err = "";
+  }catch(e){ me.err = String((e && e.message) || e); }
+  if(DRA === me && PG.name === "admindrip") draPaint();
+}
+const draNum = v => { const n = Math.round(+String(v).replace(/[^0-9]/g, "")); return n > 0 ? n : null; };
+function draState(it){
+  const e = DRA.edits[it.sku] || {};
+  return {manual: "price" in e ? e.price : it.manual, hidden: "hidden" in e ? e.hidden : it.hidden};
+}
+function draShow(it){
+  const st = draState(it), price = st.manual || it.auto, gain = price - it.cost;
+  return `${rp(price)} · untung ${gain >= 0 ? rp(gain) : "-" + rp(-gain)}`;
+}
+function draPaint(){
+  const box = $("pgBody"); if(!DRA) return;
+  if(DRA.err && !DRA.data){ box.innerHTML = `<p class="empty" style="text-align:center">${esc(DRA.err)}</p><button type="button" class="cta" data-dra="reload">Coba lagi</button>`; return; }
+  if(!DRA.data){ box.innerHTML = `<p class="empty" style="text-align:center">Memuat produk Drip…</p>`; return; }
+  const d = DRA.data;
+  const cards = d.products.map(p => {
+    const pk = "P:" + p.code, ph = pk in DRA.edits && "hidden" in DRA.edits[pk] ? DRA.edits[pk].hidden : p.hidden;
+    const rows = p.items.map(it => {
+      const st = draState(it), lab = it.status === "ready" ? "Stok " + it.stock : it.status === "maintenance" ? "Maintenance" : "Stok habis";
+      return `<div class="hist" style="display:block;margin-top:8px">
+        <b>${esc(it.duration)}</b> <small class="mut">· ${esc(lab)} · ${esc(it.sku)}</small><br>
+        <small class="mut">Modal ${rp(it.cost)} · Otomatis ${rp(it.auto)}</small>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <input class="in" data-dk="${esc(it.sku)}" inputmode="numeric" placeholder="Harga manual (Rp)" value="${st.manual || ""}" style="flex:1">
+          <label style="white-space:nowrap;font-size:13px"><input type="checkbox" data-dh="${esc(it.sku)}"${st.hidden ? " checked" : ""}> Sembunyi</label></div>
+        <small>Harga tampil: <b data-show="${esc(it.sku)}">${draShow(it)}</b></small></div>`;
+    }).join("");
+    return `<div class="pgcard" data-n="${esc((p.title + " " + p.category).toLowerCase())}"><b>${esc(p.title)}</b> <small class="mut">${esc(p.category)} · ${esc(p.platform)}</small>
+      <label style="display:block;margin-top:6px;font-size:13px"><input type="checkbox" data-dh="${esc(pk)}"${ph ? " checked" : ""}> Sembunyikan produk ini dari beranda</label>${rows}</div>`;
+  }).join("");
+  const y = window.scrollY, q = ($("draQ") && $("draQ").value) || "";
+  box.innerHTML = `<p class="mut" style="margin:0 0 10px">Semua produk dari Drip muncul otomatis. Isi <b>Harga manual</b> untuk mematok harga jual per paket (kosong = harga otomatis: modal × kurs ${esc(d.rate)} + untung ${esc(d.markup)}%). Harga tampil di beranda dan halaman produk setelah disimpan.</p>
+    ${DRA.err ? `<p class="empty">${esc(DRA.err)}</p>` : ""}
+    <input class="in" id="draQ" placeholder="Cari produk…" value="${esc(q)}" style="margin-bottom:10px">
+    ${cards || `<p class="empty">Belum ada produk dari Drip.</p>`}
+    <button type="button" class="cta" data-dra="save"${DRA.busy ? " disabled" : ""} style="margin-top:0">${DRA.busy ? "Menyimpan…" : "Simpan &amp; terapkan"}</button>`;
+  if(q) draFilter(q);
+  window.scrollTo(0, y);
+}
+function draFilter(q){ q = q.trim().toLowerCase(); $("pgBody").querySelectorAll("[data-n]").forEach(c => { c.hidden = !!q && !c.dataset.n.includes(q); }); }
+async function draSave(){
+  if(!DRA || DRA.busy) return;
+  const rows = [], find = k => { for(const p of DRA.data.products){ if("P:" + p.code === k) return {p}; for(const it of p.items) if(it.sku === k) return {it}; } return {}; };
+  for(const k of Object.keys(DRA.edits)){
+    const f = find(k), e = DRA.edits[k];
+    if(f.it){ const st = draState(f.it); rows.push({key: k, price: st.manual || null, hidden: !!st.hidden}); }
+    else if(f.p) rows.push({key: k, price: null, hidden: !!e.hidden});
+  }
+  if(!rows.length){ flash("Belum ada perubahan."); return; }
+  DRA.busy = true; draPaint();
+  try{
+    const s = await ppSession(); if(!s) throw new Error("Login Google sebagai admin dulu.");
+    for(let i = 0; i < rows.length; i += 150){
+      const r = await fetch(DRIP.url + "/admin/save", {method: "POST", headers: {"Content-Type": "application/json", Authorization: "Bearer " + s.session.access_token}, body: JSON.stringify({items: rows.slice(i, i + 150)})});
+      const j = await r.json().catch(() => ({})); if(!r.ok) throw new Error(j.error || "Gagal menyimpan.");
+    }
+    DRA.edits = {}; DRA.busy = false; DRA.err = "";
+    await draFetch(); dripLoad(); flash("Harga disimpan dan diterapkan.");
+  }catch(e){ if(DRA){ DRA.busy = false; DRA.err = String((e && e.message) || e); draPaint(); } flash(String((e && e.message) || e)); }
+}
+$("pgBody").addEventListener("input", e => {
+  if(!DRA || !DRA.data || !e.target.dataset) return;
+  if(e.target.id === "draQ"){ draFilter(e.target.value); return; }
+  const k = e.target.dataset.dk; if(!k) return;
+  const v = e.target.value.replace(/[^0-9]/g, ""); if(v !== e.target.value) e.target.value = v;
+  (DRA.edits[k] = DRA.edits[k] || {}).price = draNum(v);
+  for(const p of DRA.data.products) for(const it of p.items) if(it.sku === k){
+    const el = [...$("pgBody").querySelectorAll("[data-show]")].find(x => x.dataset.show === k); if(el) el.textContent = draShow(it);
+  }
+});
+$("pgBody").addEventListener("change", e => {
+  if(!DRA || !DRA.data || !e.target.dataset || !e.target.dataset.dh) return;
+  (DRA.edits[e.target.dataset.dh] = DRA.edits[e.target.dataset.dh] || {}).hidden = e.target.checked;
+});
+$("pgBody").addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-dra]"); if(!b || !DRA) return;
+  if(b.dataset.dra === "save") draSave();
+  else if(b.dataset.dra === "reload"){ DRA.err = ""; draFetch(); draPaint(); }
+});
 refreshAll();
-if(!routeFromUrl(true)){ flash("Produk tidak ditemukan."); try{ history.replaceState({}, "", urlFor(null)); }catch(_){} }
+{
+  const _notFound = () => { flash("Produk tidak ditemukan."); try{ history.replaceState({}, "", urlFor(null)); }catch(_){} };
+  const _sl = slugFromUrl();
+  if(_sl && DRIP.url && !DB.products.some(x => x.slug === _sl)){
+    dripLoad().then(() => { if(!routeFromUrl(true)) _notFound(); });
+  } else {
+    if(!routeFromUrl(true)) _notFound();
+    dripLoad();
+  }
+  try{ syncPpobMenu(); if(isAdmin()) dripBalLoad(true); }catch(_){}
+}
 LOAD_ON = true;
 /* halaman dimuat ulang saat back/reload (mis. aplikasi terpasang membuang halaman di memori) -> kembali ke posisi scroll terakhir */
 try{
